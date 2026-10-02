@@ -20,3 +20,13 @@ Thumbs.db
 
 # Local wrangler dev state (D1/KV/R2 emulation, never real data)
 worker/.wrangler/
+
+# server-judge-wasm-prototype: local test server, not deployed. The model
+# files are the same ~375MB production weights already fetched by the
+# browser at runtime - never committed here. Generated test-result JSON is
+# a local artifact, not source.
+web/scripts/server-judge-wasm-prototype/model_q4.onnx
+web/scripts/server-judge-wasm-prototype/model_q4.onnx_data
+web/scripts/server-judge-wasm-prototype/*.json
+!web/scripts/server-judge-wasm-prototype/package.json
+!web/scripts/server-judge-wasm-prototype/package-lock.json

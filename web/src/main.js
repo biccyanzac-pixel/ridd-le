@@ -13,7 +13,7 @@ import {
 } from "@shared/challenges.js";
 import { answerHash, normalizeAnswer } from "@shared/normalize.js";
 import { looksLikeOwnInterpretation, looksLikeRealText } from "@shared/gibberish.js";
-import { PHASE, UnsupportedDeviceError, judgeInfo, loadJudge, scoreAnswer } from "./judge.js";
+import { PHASE, UnsupportedDeviceError, judgeInfo, judgeRuntime, loadJudge, scoreAnswer } from "./judge.js";
 import { fetchAttempts, fetchLeaderboard, leaderboardEnabled, loadConfig, submit } from "./api.js";
 import {
   addLocalAttempt,
@@ -432,10 +432,16 @@ el.play.addEventListener("submit", async (event) => {
   busy = true;
   el.submit.disabled = true;
   el.submit.classList.add("busy");
-  el.submit.querySelector(".submit-label").textContent = "Judging…";
+  // judgeRuntime() reflects whatever loadJudge() already resolved to, set
+  // before this submission - no new request has been made yet, so this is
+  // never the deciding factor in whether the server fallback gets used,
+  // only how this one label reads while judging. Deliberately no mention
+  // of WASM/WebGPU/ORT/q4 - same vague-but-honest phrasing either way.
+  el.submit.querySelector(".submit-label").textContent =
+    judgeRuntime()?.device === "server-wasm" ? "Checking your answer…" : "Judging…";
 
   try {
-    const verdict = await scoreAnswer({ answer, statement: challenge.noulStatement });
+    const verdict = await scoreAnswer({ answer, statement: challenge.noulStatement, prompt: challenge.prompt });
 
     const normalized = normalizeAnswer(answer);
     const hash = await answerHash({

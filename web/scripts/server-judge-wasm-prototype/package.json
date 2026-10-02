@@ -1,0 +1,11 @@
+{
+  "name": "server-judge-wasm-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated prototype: run the EXACT browser onnxruntime-web WASM backend (not onnxruntime-node) under plain Node, to test whether the server fallback can reproduce browser-WASM numerics exactly. Not part of the production app.",
+  "dependencies": {
+    "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0",
+    "@huggingface/transformers": "^4.3.0"
+  }
+}

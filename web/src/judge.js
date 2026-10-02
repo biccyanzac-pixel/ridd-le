@@ -55,6 +55,7 @@ import { OpenJev, noul } from "open-jev";
 import { assertNoul, scoreFromNoul } from "@shared/challenges.js";
 import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
 import { loadJudgeWasm } from "./judge-wasm.js";
+import { isServerJudgeReachable, createServerJev, judgeViaServer } from "./judge-server.js";
 
 // Smallest model open-jev ships. dtype is always explicit "q4" - never
 // "auto" - so WebGPU and WASM always load the identical representation;
@@ -199,10 +200,20 @@ export function loadJudge({ onPhase } = {}) {
         // sees. See main.js's debug-mode handling for how this reaches a
         // real device without devtools access.
         console.error(`[judge] WASM fallback failed after WebGPU was unusable (stage: ${err?.stage ?? "unknown"}):`, err, err?.cause);
-        throw new UnsupportedDeviceError(
-          "This browser can't run today's judge. Try a recent version of Chrome, Edge, or Safari with WebGPU enabled.",
-          err,
-        );
+        // Local WASM itself failed (not merely "WebGPU is unavailable" -
+        // that alone never reaches this branch). Only now, as a last
+        // resort, check whether a server fallback is reachable - a cheap
+        // health probe, no model download, no answer sent yet.
+        return isServerJudgeReachable().then((reachable) => {
+          if (!reachable) {
+            throw new UnsupportedDeviceError(
+              "This browser can't run today's judge. Try a recent version of Chrome, Edge, or Safari with WebGPU enabled.",
+              err,
+            );
+          }
+          console.error("[judge] local WASM failed; falling back to server judge for this session.");
+          return createServerJev();
+        });
       });
     })
     .then((jev) => {
@@ -294,21 +305,32 @@ export function judgeRuntime() {
  * what gets stored, displayed, and hashed is still the player's original
  * text; only what the model sees is canonicalised.
  *
+ * `prompt` is only used by the server fallback path (it builds its own
+ * statement from the bare prompt server-side, the same way judge-wasm.js
+ * does locally) - the local WebGPU/WASM paths ignore it, unchanged.
+ *
  * Returns { noul, score, model, device, ms }. `score` is full precision
  * (noul * 100); nothing here rounds it.
  */
-export async function scoreAnswer({ answer, statement }) {
+export async function scoreAnswer({ answer, statement, prompt }) {
   const jev = await loadJudge();
   const started = performance.now();
 
-  const [verdict] = await jev.decide(canonicalizeForJudge(answer), [noul(statement)]);
-
-  if (!verdict || verdict.type !== "noul") {
-    throw new Error("The judge returned an unexpected answer type.");
+  let probability;
+  if (jev.runtime?.device === "server-wasm") {
+    // The server canonicalises the answer itself (same function, same
+    // place in the pipeline) - sending the raw answer here, not
+    // canonicalizeForJudge(answer), avoids applying it with a different
+    // input than what the server actually scores.
+    probability = assertNoul(await judgeViaServer({ answer, prompt }));
+  } else {
+    const [verdict] = await jev.decide(canonicalizeForJudge(answer), [noul(statement)]);
+    if (!verdict || verdict.type !== "noul") {
+      throw new Error("The judge returned an unexpected answer type.");
+    }
+    // p(yes). Validated before it can become a score.
+    probability = assertNoul(verdict.probability);
   }
-
-  // p(yes). Validated before it can become a score.
-  const probability = assertNoul(verdict.probability);
 
   return {
     noul: probability,
