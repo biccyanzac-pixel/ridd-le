@@ -441,7 +441,7 @@ el.play.addEventListener("submit", async (event) => {
     judgeRuntime()?.device === "server-wasm" ? "Checking your answer…" : "Judging…";
 
   try {
-    const verdict = await scoreAnswer({ answer, statement: challenge.noulStatement, prompt: challenge.prompt });
+    const verdict = await scoreAnswer({ answer, statement: challenge.noulStatement });
 
     const normalized = normalizeAnswer(answer);
     const hash = await answerHash({

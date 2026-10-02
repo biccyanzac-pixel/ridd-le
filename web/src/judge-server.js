@@ -6,17 +6,22 @@
  * prototype for the investigation). Never attempted merely because WebGPU
  * is unavailable, and never attempted if local WASM already works.
  *
- * This client sends nothing but { prompt, answer } and reads back
- * { score, noul } - the server computes everything itself using the exact
- * same onnxruntime-web "wasm" backend and the exact same q4 model file as
- * the browser's own WASM fallback (see judge-wasm-server.mjs in the
+ * This client sends nothing but { answer } and reads back { score, noul } -
+ * not even the riddle prompt: the server derives "today's riddle" itself
+ * from the same shared challengeForDay() the browser and the Cloudflare
+ * leaderboard worker already use, so a client can never choose or
+ * influence what its answer is actually judged against. The server
+ * computes everything else itself too, using the exact same
+ * onnxruntime-web "wasm" backend and the exact same q4 model file as the
+ * browser's own WASM fallback (see judge-wasm-server.mjs in the
  * prototype directory this is validated against). No score is ever
  * computed client-side on this path; no model is ever downloaded to the
  * browser on this path.
  *
- * SERVER_JUDGE_BASE_URL has no production value yet - this fallback is
- * not deployed. It is only exercised in local testing against the
- * server prototype (web/scripts/server-judge-wasm-prototype/server.mjs).
+ * SERVER_JUDGE_BASE_URL is the one and only place this URL is configured -
+ * set at build time via the VITE_SERVER_JUDGE_BASE_URL env var (see
+ * .github/workflows/deploy-pages.yml), falling back to the local test
+ * server's address for dev/testing.
  */
 const SERVER_JUDGE_BASE_URL = import.meta.env?.VITE_SERVER_JUDGE_BASE_URL || "http://127.0.0.1:8788";
 const HEALTH_PATH = "/health";
@@ -51,10 +56,9 @@ export async function isServerJudgeReachable() {
 /** A minimal object matching the { runtime, decide-like } shape judge.js
  * expects from a loaded judge, but scoreAnswer() in judge.js branches on
  * `runtime.device === "server-wasm"` to call judgeViaServer() directly
- * instead of the usual decide() - the server needs the bare prompt (to
- * build its own statement itself, server-side), not the pre-built
- * statement string the local paths use, so this intentionally does not
- * try to reuse decide()'s (state, questions) signature. */
+ * instead of the usual decide() - the server determines the riddle
+ * itself (see the module comment), so this intentionally does not try
+ * to reuse decide()'s (state, questions) signature at all. */
 export function createServerJev() {
   return {
     runtime: { model: "onnx-community/kev-0.6b-ONNX", family: "kev", device: "server-wasm", dtype: "q4" },
@@ -68,14 +72,15 @@ export function createServerJev() {
 /** The actual scoring call. `answer` should be the RAW (not yet
  * canonicalised) answer text - the server canonicalises it itself, the
  * same way judge-wasm.js's local path does, so this must not canonicalise
- * twice with different inputs than what the server receives. */
-export async function judgeViaServer({ answer, prompt }) {
+ * twice with different inputs than what the server receives. Deliberately
+ * takes no prompt - see the module comment. */
+export async function judgeViaServer({ answer }) {
   let response;
   try {
     response = await fetch(`${SERVER_JUDGE_BASE_URL}${JUDGE_PATH}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, answer }),
+      body: JSON.stringify({ answer }),
       signal: AbortSignal.timeout(JUDGE_TIMEOUT_MS),
     });
   } catch (err) {

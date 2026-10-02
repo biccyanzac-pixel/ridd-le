@@ -42,16 +42,21 @@ async function runThreeAttempts(forceServerFallback) {
 
   const result = await page.evaluate(async (answers) => {
     const { loadJudge, scoreAnswer, judgeRuntime } = await import("/src/judge.js");
-    const { averageScore } = await import("/@fs/C:/Users/jacobp/Desktop/jacob.gg/shared/challenges.js");
+    const { averageScore, challengeForDay } = await import(
+      "/@fs/C:/Users/jacobp/Desktop/jacob.gg/shared/challenges.js"
+    );
     await loadJudge();
-    const prompt = "What can you enter without going in?";
-    const statement = `Is the answer a plausible interpretation of the riddle "${prompt}" that resolves its apparent contradiction?`;
+    // Today's REAL challenge, via the same shared function the server
+    // now uses to derive its own prompt - the server no longer accepts
+    // a client-supplied prompt, so both sides must agree on "today"
+    // independently rather than the test hardcoding one.
+    const challenge = challengeForDay();
     const attempts = [];
     for (const answer of answers) {
-      const verdict = await scoreAnswer({ answer, statement, prompt });
+      const verdict = await scoreAnswer({ answer, statement: challenge.noulStatement });
       attempts.push({ answer, score: verdict.score });
     }
-    return { device: judgeRuntime()?.device, attempts, average: averageScore(attempts) };
+    return { device: judgeRuntime()?.device, challengeId: challenge.id, attempts, average: averageScore(attempts) };
   }, ANSWERS);
 
   await browser.close();

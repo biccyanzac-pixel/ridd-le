@@ -19,7 +19,21 @@ import { fileURLToPath } from "node:url";
 import { AutoTokenizer } from "@huggingface/transformers";
 import * as ort from "onnxruntime-web/wasm";
 import { canonicalizeForJudge } from "../../../shared/judge-canonicalize.js";
-import { scoreFromNoul, assertNoul, riddleStatement, MAX_ANSWER } from "../../../shared/challenges.js";
+import { scoreFromNoul, assertNoul, riddleStatement, challengeForDay, MAX_ANSWER } from "../../../shared/challenges.js";
+
+/** The server's own authority on "today's riddle" - the exact same
+ * deterministic function (UTC-date-derived) the browser and the
+ * Cloudflare leaderboard worker already use. A client can send an
+ * answer; it can never choose or influence which prompt that answer is
+ * judged against - JUDGE_TEST_DAY_KEY is an operator-only environment
+ * variable (set when launching the process, never derived from any
+ * request) used solely to replay a specific historical day's riddle
+ * during benchmarking/deployment verification; it is unset in normal
+ * operation, where this always resolves to the real current UTC day. */
+export function todaysPrompt() {
+  const override = process.env.JUDGE_TEST_DAY_KEY;
+  return (override ? challengeForDay(override) : challengeForDay()).prompt;
+}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MODEL_REPO = "onnx-community/kev-0.6b-ONNX";

@@ -305,14 +305,18 @@ export function judgeRuntime() {
  * what gets stored, displayed, and hashed is still the player's original
  * text; only what the model sees is canonicalised.
  *
- * `prompt` is only used by the server fallback path (it builds its own
- * statement from the bare prompt server-side, the same way judge-wasm.js
- * does locally) - the local WebGPU/WASM paths ignore it, unchanged.
+ * The server fallback path (judgeViaServer()) never receives `statement`
+ * or any prompt at all - the server derives today's riddle itself from
+ * the same shared challengeForDay() the browser and the leaderboard
+ * worker already use, so a client can never choose or influence what
+ * its answer is actually judged against. The local WebGPU/WASM paths
+ * are unaffected by this and still use the pre-built `statement` as
+ * before.
  *
  * Returns { noul, score, model, device, ms }. `score` is full precision
  * (noul * 100); nothing here rounds it.
  */
-export async function scoreAnswer({ answer, statement, prompt }) {
+export async function scoreAnswer({ answer, statement }) {
   const jev = await loadJudge();
   const started = performance.now();
 
@@ -322,7 +326,7 @@ export async function scoreAnswer({ answer, statement, prompt }) {
     // place in the pipeline) - sending the raw answer here, not
     // canonicalizeForJudge(answer), avoids applying it with a different
     // input than what the server actually scores.
-    probability = assertNoul(await judgeViaServer({ answer, prompt }));
+    probability = assertNoul(await judgeViaServer({ answer }));
   } else {
     const [verdict] = await jev.decide(canonicalizeForJudge(answer), [noul(statement)]);
     if (!verdict || verdict.type !== "noul") {

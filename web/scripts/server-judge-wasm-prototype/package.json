@@ -1,9 +1,13 @@
 {
-  "name": "server-judge-wasm-prototype",
-  "version": "0.0.0",
+  "name": "jacob-gg-server-judge",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Isolated prototype: run the EXACT browser onnxruntime-web WASM backend (not onnxruntime-node) under plain Node, to test whether the server fallback can reproduce browser-WASM numerics exactly. Not part of the production app.",
+  "description": "Server-side judge fallback for jacob.gg: runs the exact production kev-0.6b q4 model through the exact browser onnxruntime-web WASM backend (not onnxruntime-node), for devices where the local in-browser WASM judge cannot run (e.g. iOS WebKit's shared-memory-growth ceiling). Deployed independently of the Cloudflare leaderboard worker. See README.md.",
+  "scripts": {
+    "postinstall": "node fetch-model.mjs",
+    "start": "node server.mjs"
+  },
   "dependencies": {
     "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0",
     "@huggingface/transformers": "^4.3.0"

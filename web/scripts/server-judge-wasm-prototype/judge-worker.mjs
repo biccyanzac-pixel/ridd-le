@@ -14,7 +14,7 @@
  * per the brief.
  */
 import { parentPort } from "node:worker_threads";
-import { ensureLoaded, judgeAnswer } from "./judge-wasm-server.mjs";
+import { ensureLoaded, judgeAnswer, todaysPrompt } from "./judge-wasm-server.mjs";
 
 parentPort.postMessage({ type: "status", ready: false, loading: true });
 
@@ -24,9 +24,13 @@ ensureLoaded()
 
 parentPort.on("message", async (msg) => {
   if (msg.type !== "judge") return;
-  const { id, answer, prompt } = msg;
+  const { id, answer } = msg;
   try {
-    const result = await judgeAnswer(answer, prompt);
+    // The prompt is never taken from the message - it is derived here,
+    // server-side, from the same shared challengeForDay() the browser and
+    // the leaderboard worker already use, so a client can never influence
+    // which riddle/statement its answer is actually judged against.
+    const result = await judgeAnswer(answer, todaysPrompt());
     parentPort.postMessage({ type: "result", id, result });
   } catch (err) {
     parentPort.postMessage({ type: "result", id, error: String(err?.message || err) });
