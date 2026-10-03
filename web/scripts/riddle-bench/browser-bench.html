@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Riddle judge benchmark (real browser path)</title>
+  </head>
+  <body>
+    <!--
+      Runs the tiered benchmark through the EXACT judge the players use -
+      web/src/judge.js's scoreAnswer(), on whatever backend this browser
+      actually resolves to (WebGPU, or its WASM fallback). The node-side
+      benchmarks run on the "cpu" device, so this is what confirms whether
+      their conclusions hold for production.
+
+      Served by the dev server and driven by run-browser-bench.mjs:
+        http://localhost:5173/scripts/riddle-bench/browser-bench.html
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime, scoreAnswer } from "/src/judge.js";
+      import { riddleStatement } from "@shared/challenges.js";
+      import { RIDDLES } from "/scripts/riddle-bench/cases.mjs";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+      };
+      const results = { device: null, dtype: null, rows: [], error: null };
+
+      try {
+        await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) {
+              log(`downloading ${Math.round(progress * 100)}%`);
+            }
+          },
+        });
+        const rt = judgeRuntime();
+        results.device = rt?.device ?? "unknown";
+        results.dtype = rt?.dtype ?? "unknown";
+        log(`loaded on ${results.device} / ${results.dtype}`);
+
+        for (const r of RIDDLES) {
+          const statement = riddleStatement(r.prompt);
+          for (const c of r.cases) {
+            const verdict = await scoreAnswer({ answer: c.answer, statement });
+            results.rows.push({
+              riddle: r.id,
+              tier: c.tier,
+              answer: c.answer,
+              score: verdict.score,
+            });
+          }
+          log(`${r.id}: done (${r.cases.length} cases)`);
+        }
+        log(`ALL DONE: ${results.rows.length} rows`);
+      } catch (err) {
+        results.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED: ${results.error}`);
+      }
+
+      window.__BENCH__ = results;
+      window.__BENCH_DONE__ = true;
+    </script>
+  </body>
+</html>
