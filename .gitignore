@@ -33,3 +33,6 @@ web/scripts/server-judge-wasm-prototype/*.json
 
 # Local-only dev seed data for the wrangler/D1 emulator, never production
 worker/seed.local.sql
+
+# Local-only data dumps (leaderboard backups before a cleanup, etc)
+*.local.json
