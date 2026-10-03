@@ -78,26 +78,50 @@ export function looksLikeRealText(text) {
  *
  * Generic stopwords only - nothing riddle-specific - so this works for any
  * future riddle without per-challenge tuning. Measured against the same
- * benchmark: catches 4 of 5 restatement cases with zero false positives
+ * benchmark: catches 5 of 5 restatement cases with zero false positives
  * across 26 genuine-answer test cases (threshold chosen by that measurement,
- * not guessed).
+ * not guessed), plus 14 hand-written adversarial answers - see
+ * web/scripts/riddle-bench/gate-falsepositives.mjs.
+ *
+ * Comparison is on whole words, never substrings, so a riddle containing
+ * "the" does not make an answer containing "he" look like a restatement.
  */
 const STOPWORDS = new Set(
-  "a an the you can be what it is are without going in be has have i he she they we my your its this that".split(
-    " ",
-  ),
+  ("a an the you can be what it is are was were without going in has have had i he she they we " +
+    "my your its this that at all of to for on by with from as and or but not no any some only " +
+    "just more most than then there here when while which who whom whose does do did done being " +
+    "been very too also even still yet so if because about into over under again once each both")
+    .split(" "),
 );
 
-// Strips a trailing "e" before -ing/-ed so "leaving"/"leave" and
-// "believing"/"believe" share a stem; also strips plain -ing/-ed/-ly/-s.
-function stem(word) {
-  return word.replace(/e(ing|ed)$/, "$1").replace(/(ing|ed|ly|s)$/, "");
+/**
+ * The normal forms of a word. A word counts as shared with the riddle when
+ * ANY of its forms matches any of the riddle's, which catches inflections
+ * without pretending to be a real stemmer.
+ *
+ * A single stem() could not do this. The previous one claimed to make
+ * "leaving" and "leave" share a stem, but its /e(ing|ed)$/ only matches a
+ * literal "eing"/"eed", which English almost never produces: "leaving"
+ * became "leav" while "leave" stayed "leave", so they never matched - and
+ * the same split separated "passed" from "pass". That is how "Leaving
+ * without going anywhere at all" reached the judge, which then scored it
+ * 95.6.
+ *
+ * Matching on a short prefix was tried as well, to catch irregulars like
+ * lost/lose. It was dropped: it wrongly rejected "a passage in a book" for a
+ * riddle mentioning "passed", and "a station on a map" for one mentioning
+ * "stationary". Blocking a real answer is far worse than letting a
+ * restatement through, so near-misses are left to the judge.
+ */
+function wordForms(word) {
+  const base = word.replace(/(ings|ing|edly|ed|ly|es|s)$/, "");
+  return [word, base, base.replace(/e$/, ""), word.replace(/e$/, "")].filter((f) => f.length > 1);
 }
 
 function contentTokens(text) {
-  return (String(text ?? "").toLowerCase().match(/[a-z']+/g) ?? [])
-    .filter((t) => !STOPWORDS.has(t) && t.length > 1)
-    .map(stem);
+  return (String(text ?? "").toLowerCase().match(/[a-z']+/g) ?? []).filter(
+    (t) => !STOPWORDS.has(t) && t.length > 1,
+  );
 }
 
 /**
@@ -109,11 +133,11 @@ function contentTokens(text) {
 export function looksLikeOwnInterpretation(answer, riddlePrompt) {
   const answerTokens = contentTokens(answer);
   if (answerTokens.length === 0) return false;
-  const riddleTokens = new Set(contentTokens(riddlePrompt));
+  const riddleForms = new Set(contentTokens(riddlePrompt).flatMap(wordForms));
 
   let overlapping = 0;
   for (const token of answerTokens) {
-    if (riddleTokens.has(token)) overlapping += 1;
+    if (wordForms(token).some((form) => riddleForms.has(form))) overlapping += 1;
   }
   return overlapping / answerTokens.length < 0.4;
 }

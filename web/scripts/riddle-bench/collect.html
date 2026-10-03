@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Judge component collection (real player backend)</title>
+  </head>
+  <body>
+    <!--
+      Collects every candidate judge question's score for every benchmark case,
+      on the backend a real player gets (WebGPU, or its WASM fallback - both
+      verified to agree to 0.0085 points with no ranking flips). Earlier
+      benchmarks ran in node, which resolves to a "cpu" device no browser ever
+      uses and which differs by up to 2.87 points.
+
+      One expensive pass here; all combination analysis happens offline for
+      free in analyse-judges.mjs.
+
+        http://localhost:5173/scripts/riddle-bench/collect.html
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime } from "/src/judge.js";
+      import { RIDDLES } from "/scripts/riddle-bench/cases.mjs";
+      import { OPPOSITE_CASES } from "/scripts/riddle-bench/bonus-cases.mjs";
+      import { RIDDLE_COMPONENTS, BONUS_COMPONENTS } from "/scripts/riddle-bench/judge-specs.mjs";
+      import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
+      import { noul } from "open-jev";
+
+      const logEl = document.getElementById("log");
+      const log = (s) => {
+        logEl.textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, dtype: null, riddle: [], bonus: [], error: null };
+
+      try {
+        const jev = await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        const rt = judgeRuntime();
+        out.device = rt?.device ?? "unknown";
+        out.dtype = rt?.dtype ?? "unknown";
+        log(`backend: ${out.device}/${out.dtype}`);
+
+        const ask = async (state, statement) => {
+          const [v] = await jev.decide(canonicalizeForJudge(state), [noul(statement)]);
+          return v.probability * 100;
+        };
+
+        const rNames = Object.keys(RIDDLE_COMPONENTS);
+        const bNames = Object.keys(BONUS_COMPONENTS);
+        const totalCalls =
+          rNames.length * RIDDLES.reduce((t, r) => t + r.cases.length, 0) +
+          bNames.length * OPPOSITE_CASES.reduce((t, c) => t + c.cases.length, 0);
+        log(`${totalCalls} model calls to make`);
+        let done = 0;
+
+        for (const r of RIDDLES) {
+          for (const c of r.cases) {
+            const comp = {};
+            for (const name of rNames) {
+              comp[name] = await ask(c.answer, RIDDLE_COMPONENTS[name].build(r.prompt));
+              done += 1;
+            }
+            out.riddle.push({ group: r.id, prompt: r.prompt, tier: c.tier, answer: c.answer, comp });
+          }
+          log(`riddle ${r.id}: done (${done}/${totalCalls})`);
+        }
+
+        for (const item of OPPOSITE_CASES) {
+          for (const c of item.cases) {
+            const comp = {};
+            for (const name of bNames) {
+              comp[name] = await ask(c.answer, BONUS_COMPONENTS[name].build(item.prompt));
+              done += 1;
+            }
+            out.bonus.push({
+              group: item.id,
+              prompt: item.prompt,
+              kind: item.kind,
+              tier: c.tier,
+              answer: c.answer,
+              comp,
+            });
+          }
+          log(`bonus ${item.id}: done (${done}/${totalCalls})`);
+        }
+
+        log(`ALL DONE: ${out.riddle.length} riddle rows, ${out.bonus.length} bonus rows`);
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED: ${out.error}`);
+      }
+
+      window.__COLLECT__ = out;
+      window.__COLLECT_DONE__ = true;
+    </script>
+  </body>
+</html>
