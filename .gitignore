@@ -30,3 +30,6 @@ web/scripts/server-judge-wasm-prototype/model_q4.onnx_data
 web/scripts/server-judge-wasm-prototype/*.json
 !web/scripts/server-judge-wasm-prototype/package.json
 !web/scripts/server-judge-wasm-prototype/package-lock.json
+
+# Local-only dev seed data for the wrangler/D1 emulator, never production
+worker/seed.local.sql

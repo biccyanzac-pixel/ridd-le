@@ -68,6 +68,13 @@ const CHALLENGE_SLUGS = [
   "more-true-when-stop-believing",
 ];
 
+// The bonus round's slug/version. Must stay byte-identical to
+// shared/challenges.js's BONUS_SLUG/BONUS_SCORING_VERSION - the worker never
+// needs the actual word (it doesn't judge anything), only this id, to
+// recompute independently and validate what the client sent.
+const BONUS_SLUG = "bonus-opposite";
+const BONUS_SCORING_VERSION = 1;
+
 // --- shared logic, ported from shared/normalize.js and shared/challenges.js
 // so the worker can recompute independently of whatever the client sent. ---
 
@@ -119,13 +126,19 @@ function todayKey(now = new Date()) {
  * over the same-order slug list, so both sides always pick the same riddle
  * for the same UTC day. */
 function slugForDay(dayKey) {
-  const dayNumber = Math.floor(Date.parse(`${dayKey}T00:00:00Z`) / 86_400_000);
-  const index = ((dayNumber % CHALLENGE_SLUGS.length) + CHALLENGE_SLUGS.length) % CHALLENGE_SLUGS.length;
+  const day = Math.floor(Date.parse(`${dayKey}T00:00:00Z`) / 86_400_000);
+  const index = ((day % CHALLENGE_SLUGS.length) + CHALLENGE_SLUGS.length) % CHALLENGE_SLUGS.length;
   return CHALLENGE_SLUGS[index];
 }
 
 function challengeIdForDay(dayKey) {
   return `${slugForDay(dayKey)}@v${SCORING_VERSION}:${dayKey}`;
+}
+
+/** The bonus round's id for a day - same shape as challengeIdForDay, no
+ * rotation needed here (the worker never needs to know the actual word). */
+function bonusChallengeIdForDay(dayKey) {
+  return `${BONUS_SLUG}@v${BONUS_SCORING_VERSION}:${dayKey}`;
 }
 
 function validateName(raw) {
@@ -292,15 +305,22 @@ function boardRow(player, rank, playerId, redact) {
  * challenge id that is not today's (i.e. already closed) is never redacted:
  * the whole point of "yesterday's strongest interpretations" is that those
  * answers are visible normally.
+ *
+ * lateOnly selects which of two disjoint boards for the same challenge id to
+ * return: the real, same-day board (is_late = 0, the default - what everyone
+ * has always meant by "the leaderboard") or the late board (is_late = 1 -
+ * archive/replay attempts from players who didn't play that day originally).
+ * The two are never merged into one ranking; see handlePlay()'s isLate and
+ * the archive UI, which labels the late board as such wherever it's shown.
  */
-async function fetchBoard(env, challId, playerId) {
+async function fetchBoard(env, challId, playerId, lateOnly = false) {
   const { results } = await env.DB.prepare(
     `SELECT player_id, display_name, attempt_number, original_answer, score, submitted_at, id
        FROM submissions
-      WHERE challenge_id = ?
+      WHERE challenge_id = ? AND is_late = ?
       ORDER BY player_id, attempt_number ASC`,
   )
-    .bind(challId)
+    .bind(challId, lateOnly ? 1 : 0)
     .all();
 
   const byPlayer = new Map();
@@ -335,7 +355,11 @@ async function fetchBoard(env, challId, playerId) {
       String(a.firstId).localeCompare(String(b.firstId)),
   );
 
-  const isToday = challId === challengeIdForDay(todayKey());
+  // Every challenge id (main or bonus) ends in ":<dayKey>" - checking that
+  // suffix against today's key, rather than comparing against
+  // challengeIdForDay() specifically, means this redaction protection
+  // applies to the bonus round's id too without hardcoding its shape here.
+  const isToday = !lateOnly && challId.endsWith(`:${todayKey()}`);
   const viewerAttempts = isToday ? await countAttempts(env, challId, playerId) : MAX_ATTEMPTS;
   const redact = isToday && viewerAttempts < MAX_ATTEMPTS;
 
@@ -351,8 +375,9 @@ async function handleLeaderboard(request, env) {
   const url = new URL(request.url);
   const challId = url.searchParams.get("challengeId");
   const playerId = url.searchParams.get("playerId");
+  const lateOnly = url.searchParams.get("late") === "1";
   if (!challId) return fail("bad_request", "challengeId is required.", 400, env);
-  return json(await fetchBoard(env, challId, playerId), { env });
+  return json(await fetchBoard(env, challId, playerId, lateOnly), { env });
 }
 
 /** This player's own attempts at a challenge - lets a fresh page load (or a
@@ -387,17 +412,67 @@ async function handlePlay(request, env, ip) {
     return fail("bad_session", "Invalid or missing session. Reload the page.", 401, env);
   }
 
-  // The challenge id is never trusted from the client - it is recomputed from
-  // the server's own clock and the request is rejected if they disagree.
-  const day = todayKey();
-  const expectedChallengeId = challengeIdForDay(day);
-  if (body.challengeId !== expectedChallengeId) {
+  // The day being played is never trusted as a raw challenge id from the
+  // client - only a plain YYYY-MM-DD date is accepted, and the challenge id
+  // is always recomputed from it server-side via the same slug rotation the
+  // client used. That recompute is what actually proves the client isn't
+  // inventing a challenge id: an invalid or made-up date can never produce a
+  // match. Archive/replay play (today's default omits dayKey entirely) is
+  // the only reason a day other than today is ever accepted here - any day
+  // up to and including today is valid, any day after today is not.
+  const today = todayKey();
+  const requestedDay = typeof body.dayKey === "string" ? body.dayKey : today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDay) || Number.isNaN(Date.parse(`${requestedDay}T00:00:00Z`))) {
+    return fail("bad_day", "Invalid day.", 400, env);
+  }
+  if (requestedDay > today) {
+    return fail("bad_day", "That day hasn't happened yet.", 400, env);
+  }
+  const day = requestedDay;
+  const isLate = day !== today;
+
+  // Which of the two challenge families this request is for - resolved by
+  // matching against both of this server's own independent recomputes, same
+  // principle as the single-id check this replaced: the client's string is
+  // never trusted, only ever compared against what the server itself derives
+  // for `day`. Neither the bonus round's word nor the main riddle's text is
+  // needed here - only the id has to match.
+  const expectedMainId = challengeIdForDay(day);
+  const expectedBonusId = bonusChallengeIdForDay(day);
+  let kind;
+  if (body.challengeId === expectedMainId) {
+    kind = "main";
+  } else if (body.challengeId === expectedBonusId) {
+    kind = "bonus";
+  } else {
     return fail(
       "stale_challenge",
       "That riddle has ended. Refresh the page for today's.",
       409,
       env,
     );
+  }
+  const expectedChallengeId = kind === "main" ? expectedMainId : expectedBonusId;
+  const scoringVersion = kind === "main" ? SCORING_VERSION : BONUS_SCORING_VERSION;
+
+  if (kind === "bonus") {
+    // The bonus round has no archive/replay - it only ever exists for
+    // today, unlocked only after today's main riddle is finished. Checked
+    // here, server-side, not just hidden client-side: a submission that
+    // skips straight to the bonus round is rejected the same way a 4th main
+    // attempt would be.
+    if (isLate) {
+      return fail("bad_day", "The bonus round can't be replayed from the archive.", 400, env);
+    }
+    const mainCount = await countAttempts(env, expectedMainId, playerId);
+    if (mainCount < MAX_ATTEMPTS) {
+      return fail(
+        "bonus_locked",
+        "Finish today's riddle first to unlock the bonus round.",
+        403,
+        env,
+      );
+    }
   }
 
   const name = validateName(body.name);
@@ -424,7 +499,7 @@ async function handlePlay(request, env, ip) {
   const normalized = normalizeAnswer(answer);
   const expectedHash = await answerHash({
     challengeId: expectedChallengeId,
-    scoringVersion: SCORING_VERSION,
+    scoringVersion,
     normalizedAnswer: normalized,
   });
   if (body.answerHash !== expectedHash) {
@@ -462,7 +537,9 @@ async function handlePlay(request, env, ip) {
     if (count >= MAX_ATTEMPTS) {
       return fail(
         "max_attempts",
-        `All ${MAX_ATTEMPTS} attempts are already used for today.`,
+        isLate
+          ? `All ${MAX_ATTEMPTS} attempts are already used for that day.`
+          : `All ${MAX_ATTEMPTS} attempts are already used for today.`,
         409,
         env,
       );
@@ -474,15 +551,15 @@ async function handlePlay(request, env, ip) {
         `INSERT INTO submissions
            (id, player_id, challenge_id, day_key, scoring_version, attempt_number,
             display_name, original_answer, normalized_answer, answer_hash, noul, score,
-            model, submitted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            model, submitted_at, is_late)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
         .bind(
           uuid(),
           playerId,
           expectedChallengeId,
           day,
-          SCORING_VERSION,
+          scoringVersion,
           attemptNumber,
           name,
           answer,
@@ -492,6 +569,7 @@ async function handlePlay(request, env, ip) {
           expectedScore,
           model,
           new Date().toISOString(),
+          isLate ? 1 : 0,
         )
         .run();
       inserted = true;
@@ -512,12 +590,16 @@ async function handlePlay(request, env, ip) {
   }
 
   const [board, playerAttempts] = await Promise.all([
-    fetchBoard(env, expectedChallengeId, playerId),
+    fetchBoard(env, expectedChallengeId, playerId, isLate),
     fetchPlayerAttempts(env, expectedChallengeId, playerId),
   ]);
 
   return json(
-    { result: { answer, score: expectedScore, attemptNumber }, attempts: playerAttempts, leaderboard: board },
+    {
+      result: { answer, score: expectedScore, attemptNumber, late: isLate },
+      attempts: playerAttempts,
+      leaderboard: board,
+    },
     { env },
   );
 }

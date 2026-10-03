@@ -23,7 +23,16 @@ export async function loadConfig() {
   } catch {
     config = {};
   }
-  const url = typeof config.leaderboardUrl === "string" ? config.leaderboardUrl.trim() : "";
+  // A local override for development, so a dev server can talk to a local
+  // worker + local D1 instead of production (whose ALLOWED_ORIGIN rightly
+  // refuses localhost, and whose data is real). Set in web/.env.local, which
+  // is gitignored; unset in a real build, so production always uses
+  // config.json.
+  const override =
+    typeof import.meta.env?.VITE_LEADERBOARD_URL === "string"
+      ? import.meta.env.VITE_LEADERBOARD_URL.trim()
+      : "";
+  const url = override || (typeof config.leaderboardUrl === "string" ? config.leaderboardUrl.trim() : "");
   config.leaderboardUrl = url ? url.replace(/\/+$/, "") : null;
   return config;
 }
@@ -86,11 +95,17 @@ function readSession() {
   }
 }
 
-/** Today's shared leaderboard (one row per player: their best attempt). */
-export async function fetchLeaderboard(challengeId) {
+/**
+ * A challenge's shared leaderboard (one row per player: their attempts and
+ * average). `late` selects the archive/replay board (players who submitted
+ * after that day had already passed) instead of the real, same-day board -
+ * the two are always disjoint, never merged; see worker/src/index.js.
+ */
+export async function fetchLeaderboard(challengeId, { late = false } = {}) {
   const cached = readSession();
   const query = new URLSearchParams({ challengeId });
   if (cached?.playerId) query.set("playerId", cached.playerId);
+  if (late) query.set("late", "1");
   return call(`/api/leaderboard?${query}`);
 }
 

@@ -31,7 +31,13 @@ CREATE TABLE IF NOT EXISTS submissions (
   -- formatting to two decimal places happens client-side only.
   score             REAL NOT NULL CHECK (score >= 0 AND score <= 100),
   model             TEXT NOT NULL,   -- which judge/model produced this noul
-  submitted_at      TEXT NOT NULL
+  submitted_at      TEXT NOT NULL,
+  -- 0 for a submission made on challenge_id's own day (a genuine same-day
+  -- leaderboard entry); 1 for a submission made later, via the archive/replay
+  -- flow, against a past day's challenge_id. Late rows are never mixed into
+  -- that day's real leaderboard - see fetchBoard()'s lateOnly param in
+  -- src/index.js. Added in migration 0001_add_is_late.sql for existing DBs.
+  is_late           INTEGER NOT NULL DEFAULT 0
 );
 
 -- At most one row per player per challenge per attempt number - this is what

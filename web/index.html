@@ -20,7 +20,19 @@
     <main class="shell">
       <header class="masthead">
         <a class="wordmark" href="./">jacob<span>.gg</span></a>
+        <button
+          type="button"
+          class="music-toggle"
+          id="music-toggle"
+          aria-pressed="false"
+          aria-label="Play background music (Mozart's Lacrimosa)"
+          title="Mozart — Lacrimosa (public domain, 1956 recording)"
+        >
+          🎵
+        </button>
+        <span class="music-hint" id="music-hint" hidden>↗ click for inspiration</span>
       </header>
+      <audio id="music" src="./audio/lacrimosa.ogg" loop preload="none"></audio>
 
       <section class="card" id="card">
         <div class="card-top">
@@ -35,6 +47,9 @@
         </p>
         <p class="attempts-note" id="attempts-note">
           3 attempts — your daily score is the average of all three
+        </p>
+        <p class="bonus-teaser" id="bonus-teaser" hidden>
+          🎁 There's a bonus round once you finish this one.
         </p>
 
         <!-- Judge loading: distinct phases, never an unexplained spinner -->
@@ -53,7 +68,9 @@
 
         <!-- Play -->
         <form class="play" id="play" hidden>
-          <label class="field">
+          <!-- Asked once, then replaced by "Playing as …" for the rest of the
+               day - the name can't change mid-day anyway. -->
+          <label class="field" id="name-field">
             <span class="label">Your name</span>
             <input
               id="name"
@@ -64,6 +81,7 @@
               required
             />
           </label>
+          <p class="playing-as" id="playing-as" hidden></p>
 
           <label class="field">
             <span class="label">Your interpretation</span>
@@ -71,7 +89,7 @@
               id="answer"
               maxlength="80"
               rows="2"
-              placeholder="e.g. a competition"
+              placeholder="e.g. your interpretation"
               required
             ></textarea>
             <span class="counter" id="counter">0 / 80</span>
@@ -96,6 +114,9 @@
           <p class="attempts-done" id="attempts-done" hidden>
             All 3 attempts used today. Come back tomorrow for a new riddle.
           </p>
+          <button type="button" class="play-bonus-button" id="play-bonus-button" hidden>
+            🎁 Play the bonus round →
+          </button>
         </div>
       </section>
 
@@ -112,10 +133,199 @@
         <p class="board-note" id="board-note" hidden></p>
       </section>
 
+      <section class="card bonus" id="bonus" hidden>
+        <div class="card-top">
+          <h2 class="eyebrow">Bonus round</h2>
+        </div>
+        <p class="bonus-note">
+          Some words don't have a clean opposite — that's the point. 3 guesses,
+          its own leaderboard, separate from today's riddle.
+        </p>
+
+        <p class="bonus-locked" id="bonus-locked">
+          🔒 Finish today's riddle (all 3 attempts) to unlock the bonus round.
+        </p>
+
+        <div id="bonus-unlocked" hidden>
+          <h3 class="prompt" id="bonus-prompt">Loading…</h3>
+
+          <form class="play" id="bonus-play">
+            <!-- Normally never shown: the bonus round reuses the name from
+                 today's riddle (you can't reach it without playing that
+                 first). Only revealed if no name is remembered on this
+                 device - e.g. the riddle was played in another browser. -->
+            <label class="field" id="bonus-name-field" hidden>
+              <span class="label">Your name</span>
+              <input
+                id="bonus-name"
+                type="text"
+                maxlength="20"
+                autocomplete="nickname"
+                placeholder="e.g. jacob"
+              />
+            </label>
+            <p class="playing-as" id="bonus-playing-as" hidden></p>
+
+            <label class="field">
+              <span class="label">Your guess</span>
+              <textarea
+                id="bonus-answer"
+                maxlength="80"
+                rows="2"
+                placeholder="e.g. your guess"
+                required
+              ></textarea>
+              <span class="counter" id="bonus-counter">0 / 80</span>
+            </label>
+
+            <p class="error" id="bonus-error" role="alert" hidden></p>
+
+            <button class="submit" id="bonus-submit" type="submit">
+              <span class="submit-label" id="bonus-submit-label">Enter first guess</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+          </form>
+
+          <div class="attempts" id="bonus-attempts" hidden>
+            <p class="eyebrow" id="bonus-score-caption">Bonus score</p>
+            <p class="score" id="bonus-score">0.00</p>
+            <ol class="attempt-list" id="bonus-attempt-list"></ol>
+            <p class="attempts-done" id="bonus-attempts-done" hidden>
+              All 3 bonus guesses used today.
+            </p>
+          </div>
+        </div>
+
+        <!-- Below the prompt and your own score, mirroring the main riddle's
+             order (riddle, your score, then everyone else's). Shown even
+             while locked, names and averages only. -->
+        <div class="bonus-board">
+          <h4 class="eyebrow">Bonus leaderboard</h4>
+          <ol class="rows" id="bonus-rows"></ol>
+          <p class="board-empty" id="bonus-board-empty" hidden>
+            Nobody has tried the bonus round yet today.
+          </p>
+        </div>
+      </section>
+
       <section class="card yesterday" id="yesterday" hidden>
         <h2 class="eyebrow">Some of yesterday's strongest interpretations</h2>
+        <p class="yesterday-prompt" id="yesterday-prompt"></p>
         <ol class="yesterday-rows" id="yesterday-rows"></ol>
         <p class="yesterday-empty" id="yesterday-empty" hidden>Nobody played yesterday's riddle.</p>
+
+        <div class="yesterday-best" id="yesterday-best" hidden>
+          <h3 class="eyebrow">Yesterday's best average</h3>
+          <p class="yesterday-best-summary">
+            <span id="yesterday-best-name"></span> — <span id="yesterday-best-avg"></span>
+          </p>
+          <ol class="yesterday-rows" id="yesterday-best-rows"></ol>
+        </div>
+
+        <div class="yesterday-best" id="yesterday-bonus" hidden>
+          <h3 class="eyebrow">Yesterday's bonus round</h3>
+          <p class="yesterday-prompt" id="yesterday-bonus-prompt"></p>
+          <ol class="yesterday-rows" id="yesterday-bonus-rows"></ol>
+          <p class="yesterday-empty" id="yesterday-bonus-empty" hidden>
+            Nobody played yesterday's bonus round.
+          </p>
+
+          <div class="yesterday-bonus-best" id="yesterday-bonus-best" hidden>
+            <h4 class="eyebrow">Bonus round's best average</h4>
+            <p class="yesterday-best-summary">
+              <span id="yesterday-bonus-best-name"></span> —
+              <span id="yesterday-bonus-best-avg"></span>
+            </p>
+            <ol class="yesterday-rows" id="yesterday-bonus-best-rows"></ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="card archive" id="archive" hidden>
+        <div class="card-top">
+          <h2 class="eyebrow">Archive — replay a past day</h2>
+        </div>
+        <p class="archive-note">
+          Pick a past day to see its riddle and try it. Archive attempts go to a
+          separate late leaderboard — they never change that day's original
+          results.
+        </p>
+        <div class="archive-picker">
+          <button type="button" class="archive-browse" id="archive-browse">Browse archive</button>
+        </div>
+        <ul class="archive-list" id="archive-list" hidden></ul>
+
+        <div class="archive-challenge" id="archive-challenge" hidden>
+          <p class="eyebrow challenge-label" id="archive-daynum"></p>
+          <h3 class="prompt" id="archive-prompt"></h3>
+
+          <form class="play" id="archive-play">
+            <label class="field">
+              <span class="label">Your name</span>
+              <input
+                id="archive-name"
+                type="text"
+                maxlength="20"
+                autocomplete="nickname"
+                placeholder="e.g. jacob"
+                required
+              />
+            </label>
+
+            <label class="field">
+              <span class="label">Your interpretation</span>
+              <textarea
+                id="archive-answer"
+                maxlength="80"
+                rows="2"
+                placeholder="e.g. your interpretation"
+                required
+              ></textarea>
+              <span class="counter" id="archive-counter">0 / 80</span>
+            </label>
+
+            <p class="error" id="archive-error" role="alert" hidden></p>
+
+            <button class="submit" id="archive-submit" type="submit">
+              <span class="submit-label"
+                >Submit attempt <span id="archive-attempt-number">1</span> of 3</span
+              >
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+            <p class="fineprint">
+              Late entry — not made on this riddle's original day. Counts only on
+              the late leaderboard below, never the real one.
+            </p>
+          </form>
+
+          <div class="attempts" id="archive-attempts" hidden>
+            <p class="eyebrow">Your archive attempts</p>
+            <p class="score" id="archive-daily-score">0.00</p>
+            <ol class="attempt-list" id="archive-attempt-list"></ol>
+            <p class="attempts-done" id="archive-attempts-done" hidden>
+              All 3 archive attempts used for this day.
+            </p>
+          </div>
+
+          <div class="archive-boards">
+            <div class="archive-board">
+              <h4 class="eyebrow">That day's real leaderboard</h4>
+              <ol class="rows" id="archive-real-rows"></ol>
+              <p class="board-empty" id="archive-real-empty" hidden>
+                Nobody played on the actual day.
+              </p>
+            </div>
+            <div class="archive-board">
+              <h4 class="eyebrow late-heading">
+                Late leaderboard <span class="late-badge">not made on the original day</span>
+              </h4>
+              <ol class="rows" id="archive-late-rows"></ol>
+              <p class="board-empty" id="archive-late-empty" hidden>
+                Nobody has replayed this day yet.
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <footer class="footer">
