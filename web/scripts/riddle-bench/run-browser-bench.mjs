@@ -31,6 +31,17 @@ const browser = await chromium.launch({
   args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan"],
 });
 const page = await (await browser.newContext()).newPage();
+
+// --no-gpu hides navigator.gpu so judge.js takes its WASM fallback instead.
+// That is the comparison that matters for fairness: WebGPU and WASM are the
+// two backends real players actually get, and the dtype is pinned to q4 so
+// that both are supposed to produce identical scores.
+if (process.argv.includes("--no-gpu")) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true });
+  });
+  console.log("forcing the WASM path (navigator.gpu hidden)");
+}
 page.on("console", (m) => {
   const t = m.text();
   if (/loaded on|done|FAILED|ALL DONE/.test(t)) console.log(`  [page] ${t}`);
@@ -41,6 +52,15 @@ await page.goto(URL, { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => window.__BENCH_DONE__ === true, null, { timeout: 30 * 60 * 1000 });
 const out = await page.evaluate(() => window.__BENCH__);
 await browser.close();
+
+// --save <file> persists per-case scores so backend-equivalence.mjs can diff
+// this backend against another one case by case.
+const saveIdx = process.argv.indexOf("--save");
+if (saveIdx !== -1 && process.argv[saveIdx + 1]) {
+  const fsmod = await import("node:fs");
+  fsmod.writeFileSync(process.argv[saveIdx + 1], JSON.stringify(out, null, 2));
+  console.log(`saved per-case scores to ${process.argv[saveIdx + 1]}`);
+}
 
 if (out.error) {
   console.error(`\nbenchmark failed in the browser: ${out.error}`);
