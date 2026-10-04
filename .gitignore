@@ -36,3 +36,6 @@ worker/seed.local.sql
 
 # Local-only data dumps (leaderboard backups before a cleanup, etc)
 *.local.json
+
+# Benchmark score dumps - local measurement data, regenerable
+web/*-scores.json
