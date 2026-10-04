@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Full scoring benchmark collection</title>
+  </head>
+  <body>
+    <!--
+      One collection pass over EVERY case set, on the backend players get, so
+      the scoring design can be settled by measurement instead of another
+      round of guessing. All combination analysis then happens offline for
+      free in analyse-full.mjs.
+
+      Case sets, deliberately mixed - each earlier mistake came from testing
+      on only one of these:
+        - the 58 invented tiered riddle answers (has parroting and nonsense tiers)
+        - 25 REAL production answers, tiered by hand
+        - 35 synonym-paraphrase cases across 5 riddles (the live exploit)
+        - 64 invented tiered bonus answers across 8 prompts
+        - 9 REAL bonus answers to "wifi"
+
+      http://localhost:5173/scripts/riddle-bench/full-collect.html
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime } from "/src/judge.js";
+      import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
+      import { noul } from "open-jev";
+      import { RIDDLES } from "/scripts/riddle-bench/cases.mjs";
+      import { OPPOSITE_CASES } from "/scripts/riddle-bench/bonus-cases.mjs";
+      import { REAL_BONUS, REAL_RIDDLE_1, REAL_RIDDLE_2 } from "/scripts/riddle-bench/real-answers.mjs";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, dtype: null, riddle: [], bonus: [], error: null };
+
+      // --- riddle components. `role` drives how the analyser may combine them.
+      const R = {
+        shipped: {
+          role: "quality",
+          f: (r) => `Is the answer a plausible interpretation of the riddle "${r}" that resolves its apparent contradiction?`,
+        },
+        namesNoThing: {
+          role: "parrot",
+          f: (r) => `The answer describes the riddle "${r}" instead of naming a thing that answers it.`,
+        },
+        restates: { role: "parrot", f: (r) => `This is a restatement of the riddle "${r}", not an answer to it.` },
+        sameThingOtherWords: {
+          role: "parrot",
+          f: (r) => `The answer says the same thing as the riddle "${r}", only in different words.`,
+        },
+        meaningful: { role: "junk", f: () => `The answer is meaningful English, not a random string of words.` },
+        isSpecificThing: { role: "junk", f: () => `The answer names one specific, nameable thing.` },
+      };
+
+      // --- bonus components
+      const B = {
+        shippedV1: { role: "quality", f: (p) => `Is the answer a plausible opposite of "${p}"?` },
+        opposedMeaning: { role: "quality", f: (p) => `This has the opposite meaning to "${p}".` },
+        sameTopicOnly: { role: "parrot", f: (p) => `The answer is related to "${p}" but is not its opposite.` },
+        notSameThing: { role: "parrot", f: (p) => `The answer is just "${p}" again, or a word for the same thing.` },
+        describesInstead: {
+          role: "parrot",
+          f: (p) => `The answer describes being the opposite of "${p}" instead of naming a thing.`,
+        },
+        meaningful: { role: "junk", f: () => `The answer is meaningful English, not a random string of words.` },
+        isSpecificThing: { role: "junk", f: () => `The answer names one specific, nameable thing.` },
+      };
+
+      // --- riddle cases from every source, tagged so the analyser can slice
+      const riddleCases = [];
+      for (const r of RIDDLES) {
+        for (const c of r.cases) {
+          riddleCases.push({ set: "invented", group: r.id, prompt: r.prompt, tier: c.tier, answer: c.answer });
+        }
+      }
+      for (const [i, rr] of [REAL_RIDDLE_1, REAL_RIDDLE_2].entries()) {
+        for (const c of rr.cases) {
+          riddleCases.push({ set: "real", group: `real${i + 1}`, prompt: rr.prompt, tier: c.tier, answer: c.answer });
+        }
+      }
+      // paraphrase exploit cases: tier 8 = parroting, tier 2 = genuine
+      const PARA = [
+        {
+          prompt: "What becomes safer the more people know it?",
+          p: [
+            "something that is more safe as greater number of individuals are aware of it",
+            "a thing whose safety grows as more persons learn of it",
+            "it gets less dangerous once additional people find out",
+          ],
+          g: ["a password that has been changed", "a whistleblower's evidence", "a rumour of a fire", "an open secret"],
+        },
+        {
+          prompt: "What can you break without touching it?",
+          p: [
+            "something you can shatter while never making contact with it",
+            "a thing broken with no physical touch involved",
+            "you break it and you never touch it",
+          ],
+          g: ["a promise", "a silence", "a world record", "someone's concentration"],
+        },
+        {
+          prompt: "What do you keep only by giving it away?",
+          p: [
+            "a thing retained solely through the act of handing it to others",
+            "something you hold onto only when you hand it over",
+            "you keep it by giving it",
+          ],
+          g: ["trust", "a secret shared with one person", "knowledge", "love"],
+        },
+        {
+          prompt: "What gets louder the quieter a room becomes?",
+          p: [
+            "a sound that increases in volume as the space grows more silent",
+            "it becomes noisier when the room turns quieter",
+            "something louder in a quieter room",
+          ],
+          g: ["tinnitus", "your own heartbeat", "a doubt", "a dripping tap"],
+        },
+        {
+          prompt: "What travels without moving?",
+          p: [
+            "a thing that journeys while remaining stationary",
+            "something which goes places yet never shifts position",
+            "it travels and does not move",
+          ],
+          g: ["a rumour", "news", "a smell", "a radio signal"],
+        },
+      ];
+      for (const [i, c] of PARA.entries()) {
+        for (const a of c.p) riddleCases.push({ set: "paraphrase", group: `para${i}`, prompt: c.prompt, tier: 8, answer: a });
+        for (const a of c.g) riddleCases.push({ set: "paraphrase", group: `para${i}`, prompt: c.prompt, tier: 2, answer: a });
+      }
+
+      // --- bonus cases
+      const bonusCases = [];
+      for (const item of OPPOSITE_CASES) {
+        for (const c of item.cases) {
+          bonusCases.push({ set: "invented", group: item.id, prompt: item.prompt, kind: item.kind, tier: c.tier, answer: c.answer });
+        }
+      }
+      for (const c of REAL_BONUS.cases) {
+        bonusCases.push({ set: "real", group: "real-wifi", prompt: REAL_BONUS.prompt, kind: "word", tier: c.tier, answer: c.answer });
+      }
+
+      try {
+        const jev = await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`phase downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        out.device = judgeRuntime()?.device;
+        out.dtype = judgeRuntime()?.dtype;
+        out.riddleRoles = Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v.role]));
+        out.bonusRoles = Object.fromEntries(Object.entries(B).map(([k, v]) => [k, v.role]));
+        log(`backend ${out.device}/${out.dtype}`);
+        const total = riddleCases.length * Object.keys(R).length + bonusCases.length * Object.keys(B).length;
+        log(`${riddleCases.length} riddle + ${bonusCases.length} bonus cases -> ${total} calls`);
+
+        const ask = async (state, statement) => {
+          const [v] = await jev.decide(canonicalizeForJudge(state), [noul(statement)]);
+          return v.probability * 100;
+        };
+
+        let done = 0;
+        for (const c of riddleCases) {
+          const comp = {};
+          for (const [name, spec] of Object.entries(R)) {
+            comp[name] = await ask(c.answer, spec.f(c.prompt));
+            done += 1;
+          }
+          out.riddle.push({ ...c, comp });
+          if (out.riddle.length % 20 === 0) log(`riddle ${out.riddle.length}/${riddleCases.length} (${done} calls)`);
+        }
+        log(`riddles DONE`);
+        for (const c of bonusCases) {
+          const comp = {};
+          for (const [name, spec] of Object.entries(B)) {
+            comp[name] = await ask(c.answer, spec.f(c.prompt));
+            done += 1;
+          }
+          out.bonus.push({ ...c, comp });
+          if (out.bonus.length % 20 === 0) log(`bonus ${out.bonus.length}/${bonusCases.length} (${done} calls)`);
+        }
+        log(`ALL DONE ${out.riddle.length} riddle rows, ${out.bonus.length} bonus rows, ${done} calls`);
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED ${out.error}`);
+      }
+      window.__FULL__ = out;
+      window.__FULL_DONE__ = true;
+    </script>
+  </body>
+</html>

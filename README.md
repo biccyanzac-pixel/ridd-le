@@ -8,12 +8,34 @@ the leaderboard discovers the strongest readings after the fact.
 
 Three things define it:
 
-1. **The score is a probability, not an opinion.** The judge is asked one
-   yes/no question — *is this answer a plausible interpretation of the riddle
-   that resolves its apparent contradiction?* — and returns a probability
-   between 0 and 1. The score is that probability × 100, at full precision.
-   Nothing generates a 0–100 judgement directly and nothing rescales it;
-   rounding to two decimals happens only at display time.
+1. **The score is a probability, not an opinion.** The judge is asked yes/no
+   questions and returns probabilities; the score is a probability × 100, at
+   full precision. Nothing generates a 0–100 judgement directly and nothing
+   rescales it; rounding to two decimals happens only at display time.
+
+   From 5 October the riddle is judged by **two** questions, both answered in
+   the browser:
+
+   | | |
+   | --- | --- |
+   | is it an answer | *This is a real answer to the riddle "…", not a rewording of it.* |
+   | is it a rewording | *The answer describes the riddle "…" instead of naming a thing that answers it.* |
+
+   The score is the first scaled down by the second: `first × (1 − second)^1.5`.
+   Multiplying rather than subtracting matters — subtracting a penalty lowers
+   every answer including the good ones, while scaling leaves an answer that
+   earns no penalty untouched.
+
+   Before 5 October a single question was asked, and days up to then keep it
+   (see `SCORING_VERSIONS`). That question could be farmed: an answer that
+   restated the riddle in synonyms scored 98.77 while genuine answers scored
+   around 41, because word-overlap filtering cannot see that "people" and
+   "individuals" mean the same thing. Twenty-seven single-question phrasings
+   were measured and none fixed it, including compound ones — telling this
+   model "and not a rewording" merely raises every score, since it does not
+   check the negative half of an instruction. Two questions do fix it:
+   measured against real submissions, genuine answers went from 41 to 50 and
+   reworded ones from 83 to 28.
 2. **The model runs in your browser.** open-jev's `kev-0.6b` via WebGPU (with
    a same-model WASM fallback). No API key, no inference bill, no answer
    leaving your device to be scored. The trade-off is honest and documented
@@ -142,6 +164,14 @@ Honest list; none of these are secretly handled.
   was not, and measurement shows it barely separates a sensible answer from
   nonsense — scores land in a narrow band near zero regardless of effort.
   `web/scripts/riddle-bench/bonus-sweep.mjs` reproduces this.
+- **A well-formed but irrelevant answer still scores middling.** The two-
+  question scoring suppresses rewording, not irrelevance: nothing the model
+  was asked distinguishes a good answer from a fluent unrelated one. On
+  5 October's riddle "purple elephant toaster" scores 54.8 against 52.3 for
+  genuine answers. It is not a regression - one question gave it 77.6 against
+  72.5 - but it is not solved either, and no detector tried could tell the two
+  apart (asking whether an answer is "meaningful English" rates nonsense 89.6
+  and good answers 89.8).
 - **Rate limiting is per-isolate and in-memory.** Enough to blunt a burst, not
   a real distributed limiter.
 

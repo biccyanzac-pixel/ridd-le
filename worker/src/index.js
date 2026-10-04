@@ -45,7 +45,22 @@
  * trade-off for a free, local-inference game - see README.md.
  */
 
-const SCORING_VERSION = 4;
+// Main-riddle scoring versions, by the UTC day they take effect - must stay
+// byte-identical in dates and versions to shared/challenges.js's
+// SCORING_VERSIONS. v5 scores with two model calls in the browser rather
+// than one; the worker never judges, so all it needs is the version that
+// forms the day's challenge id and goes into the answer hash. A past day
+// keeps the version it was played under, so its leaderboard stays reachable.
+const SCORING_VERSIONS = [
+  { from: "2026-10-05", version: 5 },
+  { from: "0000-01-01", version: 4 },
+];
+
+function scoringVersionForDay(dayKey) {
+  return (
+    SCORING_VERSIONS.find((v) => dayKey >= v.from) ?? SCORING_VERSIONS[SCORING_VERSIONS.length - 1]
+  ).version;
+}
 const MAX_NAME = 20;
 // Short free-text interpretations only, matching shared/challenges.js.
 const MAX_ANSWER = 80;
@@ -195,7 +210,7 @@ function slugForDay(dayKey) {
 }
 
 function challengeIdForDay(dayKey) {
-  return `${slugForDay(dayKey)}@v${SCORING_VERSION}:${dayKey}`;
+  return `${slugForDay(dayKey)}@v${scoringVersionForDay(dayKey)}:${dayKey}`;
 }
 
 /** The bonus round's id for a day - same shape as challengeIdForDay, no
@@ -532,7 +547,7 @@ async function handlePlay(request, env, ip) {
   // Taken from the day, not a bare constant: the bonus round's version moves
   // on a date (see BONUS_VERSIONS), and the answer hash folds it in, so a
   // mismatch here would reject every submission for that day.
-  const scoringVersion = kind === "main" ? SCORING_VERSION : bonusVersionForDay(day);
+  const scoringVersion = kind === "main" ? scoringVersionForDay(day) : bonusVersionForDay(day);
 
   if (kind === "bonus") {
     // The bonus round has no archive/replay - it only ever exists for

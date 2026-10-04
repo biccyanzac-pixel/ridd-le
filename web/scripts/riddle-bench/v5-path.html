@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>v5 two-call scoring path</title>
+  </head>
+  <body>
+    <!--
+      Exercises the NEW code: scoreAnswer() making two model calls and
+      multiplying them. This path cannot be tested in production before it
+      activates at midnight UTC, and the worker refuses future days, so it is
+      checked here against tomorrow's real challenge object.
+
+      http://localhost:5173/scripts/riddle-bench/v5-path.html
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime, scoreAnswer } from "/src/judge.js";
+      import { challengeForDay } from "@shared/challenges.js";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, rows: [], error: null, v4: null, v5: null };
+
+      try {
+        await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`phase downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        out.device = judgeRuntime()?.device;
+        log(`backend ${out.device}`);
+
+        const today = challengeForDay("2026-10-04"); // v4, one call
+        const tomorrow = challengeForDay("2026-10-05"); // v5, two calls
+        out.v4 = { id: today.id, calls: today.penaltyStatement ? 2 : 1 };
+        out.v5 = { id: tomorrow.id, calls: tomorrow.penaltyStatement ? 2 : 1, prompt: tomorrow.prompt };
+        log(`v4 ${today.id} -> ${out.v4.calls} call(s)`);
+        log(`v5 ${tomorrow.id} -> ${out.v5.calls} call(s)`);
+
+        // Genuine answers plus a deliberate rewording of tomorrow's riddle.
+        const ANSWERS = [
+          { answer: "a habit", kind: "genuine" },
+          { answer: "a backpack", kind: "genuine" },
+          { answer: "a reputation", kind: "genuine" },
+          { answer: "something that carries you while you carry it", kind: "REWORDED" },
+          { answer: "a thing you carry that is also carrying you", kind: "REWORDED" },
+          { answer: "purple elephant toaster", kind: "nonsense" },
+        ];
+
+        for (const a of ANSWERS) {
+          const v4 = await scoreAnswer({ answer: a.answer, statement: tomorrow.noulStatement });
+          const v5 = await scoreAnswer({
+            answer: a.answer,
+            statement: tomorrow.noulStatement,
+            penaltyStatement: tomorrow.penaltyStatement,
+            penaltyExponent: tomorrow.penaltyExponent,
+          });
+          out.rows.push({ ...a, oneCall: v4.score, twoCall: v5.score, ms1: v4.ms, ms2: v5.ms });
+          log(`  ${a.kind.padEnd(8)} 1call ${v4.score.toFixed(1)}  2call ${v5.score.toFixed(1)}  "${a.answer}"`);
+        }
+        log("ALL DONE");
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED ${out.error}`);
+      }
+      window.__V5__ = out;
+      window.__V5_DONE__ = true;
+    </script>
+  </body>
+</html>

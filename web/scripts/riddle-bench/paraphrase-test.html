@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Paraphrase-parroting detection</title>
+  </head>
+  <body>
+    <!--
+      The live exploit the word-gate cannot touch.
+      jacob answered today's riddle "What becomes safer the more people know
+      it?" with "something that is more safe as greater number of individuals
+      are aware of it" and scored 98.77. It shares no content words with the
+      riddle - safer/more safe, people/individuals, know/aware are synonyms,
+      not spelling variants - so overlap is 0% and no lexical rule can see it.
+
+      Five riddles, each with three synonym-paraphrases and four genuine
+      answers, against five candidate detectors. A usable detector needs
+      every paraphrase above every genuine answer, on every riddle - one
+      riddle proving it is how the "without" framing fooled me.
+
+      http://localhost:5173/scripts/riddle-bench/paraphrase-test.html
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime } from "/src/judge.js";
+      import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
+      import { noul } from "open-jev";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, dtype: null, rows: [], error: null };
+
+      const CASES = [
+        {
+          riddle: "What becomes safer the more people know it?",
+          paraphrase: [
+            // jacob's real live answer, scored 98.77
+            "something that is more safe as greater number of individuals are aware of it",
+            "a thing whose safety grows as more persons learn of it",
+            "it gets less dangerous once additional people find out",
+          ],
+          genuine: ["a password that has been changed", "a whistleblower's evidence", "a rumour of a fire", "an open secret"],
+        },
+        {
+          riddle: "What can you break without touching it?",
+          paraphrase: [
+            "something you can shatter while never making contact with it",
+            "a thing broken with no physical touch involved",
+            "you break it and you never touch it",
+          ],
+          genuine: ["a promise", "a silence", "a world record", "someone's concentration"],
+        },
+        {
+          riddle: "What do you keep only by giving it away?",
+          paraphrase: [
+            "a thing retained solely through the act of handing it to others",
+            "something you hold onto only when you hand it over",
+            "you keep it by giving it",
+          ],
+          genuine: ["trust", "a secret shared with one person", "knowledge", "love"],
+        },
+        {
+          riddle: "What gets louder the quieter a room becomes?",
+          paraphrase: [
+            "a sound that increases in volume as the space grows more silent",
+            "it becomes noisier when the room turns quieter",
+            "something louder in a quieter room",
+          ],
+          genuine: ["tinnitus", "your own heartbeat", "a doubt", "a dripping tap"],
+        },
+        {
+          riddle: "What travels without moving?",
+          paraphrase: [
+            "a thing that journeys while remaining stationary",
+            "something which goes places yet never shifts position",
+            "it travels and does not move",
+          ],
+          genuine: ["a rumour", "news", "a smell", "a radio signal"],
+        },
+      ];
+
+      const DETECTORS = {
+        shippedQuality: (r) =>
+          `Is the answer a plausible interpretation of the riddle "${r}" that resolves its apparent contradiction?`,
+        restates: (r) => `This is a restatement of the riddle "${r}", not an answer to it.`,
+        sameThingOtherWords: (r) =>
+          `The answer says the same thing as the riddle "${r}", only in different words.`,
+        namesNoThing: (r) =>
+          `The answer describes the riddle "${r}" instead of naming a thing that answers it.`,
+        isSpecificThing: () => `The answer names one specific, nameable thing.`,
+      };
+
+      try {
+        const jev = await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`phase downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        out.device = judgeRuntime()?.device;
+        out.dtype = judgeRuntime()?.dtype;
+        log(`backend ${out.device}/${out.dtype}`);
+        const ask = async (state, statement) => {
+          const [v] = await jev.decide(canonicalizeForJudge(state), [noul(statement)]);
+          return v.probability * 100;
+        };
+
+        for (const [name, build] of Object.entries(DETECTORS)) {
+          for (const c of CASES) {
+            const statement = build(c.riddle);
+            for (const a of c.paraphrase) {
+              out.rows.push({ detector: name, riddle: c.riddle, kind: "paraphrase", answer: a, score: await ask(a, statement) });
+            }
+            for (const a of c.genuine) {
+              out.rows.push({ detector: name, riddle: c.riddle, kind: "genuine", answer: a, score: await ask(a, statement) });
+            }
+          }
+          log(`detector ${name} DONE`);
+        }
+        log(`ALL DONE ${out.rows.length} rows`);
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED ${out.error}`);
+      }
+      window.__PARA__ = out;
+      window.__PARA_DONE__ = true;
+    </script>
+  </body>
+</html>

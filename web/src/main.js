@@ -796,7 +796,12 @@ el.archivePlay.addEventListener("submit", async (event) => {
     // idempotent) - loaded on demand here since a player who already
     // finished today's riddle may never have triggered prepareJudge().
     await loadJudge();
-    const verdict = await scoreAnswer({ answer, statement: archiveChallenge.noulStatement });
+    const verdict = await scoreAnswer({
+      answer,
+      statement: archiveChallenge.noulStatement,
+      penaltyStatement: archiveChallenge.penaltyStatement,
+      penaltyExponent: archiveChallenge.penaltyExponent,
+    });
 
     const normalized = normalizeAnswer(answer);
     const hash = await answerHash({
@@ -1218,7 +1223,12 @@ el.play.addEventListener("submit", async (event) => {
     judgeRuntime()?.device === "server-wasm" ? "Checking your answer…" : "Judging…";
 
   try {
-    const verdict = await scoreAnswer({ answer, statement: challenge.noulStatement });
+    const verdict = await scoreAnswer({
+      answer,
+      statement: challenge.noulStatement,
+      penaltyStatement: challenge.penaltyStatement,
+      penaltyExponent: challenge.penaltyExponent,
+    });
 
     const normalized = normalizeAnswer(answer);
     const hash = await answerHash({

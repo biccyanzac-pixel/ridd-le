@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Framing test: plainer questions</title>
+  </head>
+  <body>
+    <!--
+      jacob's suggestion: ask "does this answer make this riddle true?" rather
+      than the shipped "is the answer a plausible interpretation of the riddle
+      that resolves its apparent contradiction?".
+
+      sweep.mjs did test near variants ("Does the answer make the riddle X true
+      under a plausible interpretation of its wording?") but never the plain
+      form, and only against the invented cases with relative ranking. The
+      qualifier may be what hurts: it is a lot of clause for a 0.6B model, and
+      the shipped question is the one that scores restatements 84 and genuine
+      answers 32.
+
+      Also tests plainer bonus phrasings, including jacob's "is X the opposite
+      of Y" shape.
+
+      http://localhost:5173/scripts/riddle-bench/framing-v2.html
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime } from "/src/judge.js";
+      import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
+      import { noul } from "open-jev";
+      import { RIDDLES } from "/scripts/riddle-bench/cases.mjs";
+      import { OPPOSITE_CASES } from "/scripts/riddle-bench/bonus-cases.mjs";
+      import { REAL_BONUS, REAL_RIDDLE_1, REAL_RIDDLE_2 } from "/scripts/riddle-bench/real-answers.mjs";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, dtype: null, riddle: [], bonus: [], error: null };
+
+      const RIDDLE_FRAMINGS = {
+        shipped: (r) =>
+          `Is the answer a plausible interpretation of the riddle "${r}" that resolves its apparent contradiction?`,
+        // jacob's suggestion, as plainly as it can be put
+        makesTrue: (r) => `Does this answer make the riddle "${r}" true?`,
+        makesTrueDecl: (r) => `This answer makes the riddle "${r}" true.`,
+        // the round-1 sweep variants, for a like-for-like comparison
+        makesTrueQualified: (r) =>
+          `Does the answer make the riddle "${r}" true under a plausible interpretation of its wording?`,
+        // even plainer
+        isAnAnswer: (r) => `Is this a correct answer to the riddle "${r}"?`,
+        answersIt: (r) => `This answers the riddle "${r}".`,
+      };
+
+      const BONUS_FRAMINGS = {
+        liveV2: (p) => `This has the opposite meaning to "${p}".`,
+        // jacob's shape
+        isTheOpposite: (p) => `Is this the opposite of "${p}"?`,
+        isOppositeDecl: (p) => `This is the opposite of "${p}".`,
+        oppositeOfEach: (p) => `This and "${p}" are opposites of each other.`,
+      };
+
+      const riddleCases = [];
+      for (const r of RIDDLES)
+        for (const c of r.cases)
+          riddleCases.push({ set: "invented", group: r.id, prompt: r.prompt, tier: c.tier, answer: c.answer });
+      for (const [i, rr] of [REAL_RIDDLE_1, REAL_RIDDLE_2].entries())
+        for (const c of rr.cases)
+          riddleCases.push({ set: "real", group: `real${i + 1}`, prompt: rr.prompt, tier: c.tier, answer: c.answer });
+
+      const bonusCases = [];
+      for (const item of OPPOSITE_CASES)
+        for (const c of item.cases)
+          bonusCases.push({ set: "invented", group: item.id, prompt: item.prompt, tier: c.tier, answer: c.answer });
+      for (const c of REAL_BONUS.cases)
+        bonusCases.push({ set: "real", group: "real-wifi", prompt: REAL_BONUS.prompt, tier: c.tier, answer: c.answer });
+
+      try {
+        const jev = await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`phase downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        out.device = judgeRuntime()?.device;
+        out.dtype = judgeRuntime()?.dtype;
+        log(`backend ${out.device}/${out.dtype}`);
+        const ask = async (state, statement) => {
+          const [v] = await jev.decide(canonicalizeForJudge(state), [noul(statement)]);
+          return v.probability * 100;
+        };
+
+        for (const [name, build] of Object.entries(RIDDLE_FRAMINGS)) {
+          for (const c of riddleCases)
+            out.riddle.push({ ...c, framing: name, score: await ask(c.answer, build(c.prompt)) });
+          log(`riddle framing ${name} DONE`);
+        }
+        for (const [name, build] of Object.entries(BONUS_FRAMINGS)) {
+          for (const c of bonusCases)
+            out.bonus.push({ ...c, framing: name, score: await ask(c.answer, build(c.prompt)) });
+          log(`bonus framing ${name} DONE`);
+        }
+        log(`ALL DONE ${out.riddle.length} + ${out.bonus.length} rows`);
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED ${out.error}`);
+      }
+      window.__FV2__ = out;
+      window.__FV2_DONE__ = true;
+    </script>
+  </body>
+</html>

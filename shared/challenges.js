@@ -446,14 +446,84 @@ export function challengeId(slug, scoringVersion, dayKey) {
 }
 
 /** A challenge fully resolved for a given UTC day. Derived, never chosen. */
+/**
+ * How the main riddle is judged, by the UTC day it takes effect - newest
+ * first, same dated-switch reasoning as ROTATIONS: the version is folded
+ * into every challenge id and answer hash, so changing a past day's version
+ * would point it at an id holding no submissions and blank its leaderboard.
+ *
+ * v4 asked one question: "Is the answer a plausible interpretation of the
+ * riddle X that resolves its apparent contradiction?" Measured against real
+ * play, it put an answer that merely reworded the riddle at 83-99 and
+ * genuine answers at ~41, which is how a player scored 98.77 for restating
+ * today's riddle in synonyms. Word-overlap cannot catch that - "people"
+ * against "individuals" is meaning, not spelling - and no single question
+ * fixed it across 27 phrasings tried, including compound ones: telling this
+ * model "and not a rewording" simply raises every score, because it does not
+ * check the negative half.
+ *
+ * v5 asks two questions and multiplies. The first is the quality judgement;
+ * the second detects describing-the-riddle-instead-of-answering-it, and
+ * scales the first down. Measured on real answers: genuine answers 41 -> 50,
+ * reworded 83 -> 28, nonsense 24 -> 37, so good answers rise while the
+ * exploit falls below them. The exponent came from the same measurement.
+ *
+ * Both calls stay in the browser, so this costs nothing but a second forward
+ * pass. The combined value is still a probability in [0, 1], so the score is
+ * still exactly noul * 100 and the worker's existing checks hold unchanged.
+ */
+const SCORING_VERSIONS = [
+  {
+    from: "2026-10-05",
+    version: 5,
+    statement: (prompt) => `This is a real answer to the riddle "${prompt}", not a rewording of it.`,
+    penaltyStatement: (prompt) =>
+      `The answer describes the riddle "${prompt}" instead of naming a thing that answers it.`,
+    penaltyExponent: 1.5,
+  },
+  {
+    from: "0000-01-01",
+    version: 4,
+    statement: riddleStatement,
+    penaltyStatement: null,
+    penaltyExponent: 0,
+  },
+];
+
+function scoringForDay(dayKey) {
+  return SCORING_VERSIONS.find((v) => dayKey >= v.from) ?? SCORING_VERSIONS[SCORING_VERSIONS.length - 1];
+}
+
+/** The scoring version in force on a UTC day. Day-derived, never a bare
+ * constant, so a past day keeps the version it was played under. */
+export function scoringVersionForDay(dayKey) {
+  return scoringForDay(dayKey).version;
+}
+
+/**
+ * Combine the two judgements into one probability. Multiplicative rather than
+ * subtractive on purpose: subtracting a penalty lowers every answer equally,
+ * including good ones, whereas scaling leaves an answer that earns no penalty
+ * untouched. Both inputs are probabilities, so the result is one too.
+ */
+export function combineNoul(quality, penalty, exponent) {
+  if (!exponent) return assertNoul(quality);
+  return assertNoul(assertNoul(quality) * (1 - assertNoul(penalty)) ** exponent);
+}
+
 export function challengeForDay(dayKey = todayKey()) {
   const { definition, dayNumber } = definitionForDay(dayKey);
+  const scoring = scoringForDay(dayKey);
   return {
     ...definition,
     dayKey,
     dayNumber,
-    id: challengeId(definition.slug, definition.scoringVersion, dayKey),
-    noulStatement: riddleStatement(definition.prompt),
+    scoringVersion: scoring.version,
+    id: challengeId(definition.slug, scoring.version, dayKey),
+    noulStatement: scoring.statement(definition.prompt),
+    // null before v5, which is how judge.js knows to make one call not two.
+    penaltyStatement: scoring.penaltyStatement ? scoring.penaltyStatement(definition.prompt) : null,
+    penaltyExponent: scoring.penaltyExponent,
   };
 }
 

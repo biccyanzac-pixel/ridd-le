@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>One question asking both things</title>
+  </head>
+  <body>
+    <!--
+      jacob's idea: instead of a separate anti-parroting call whose penalty
+      drags every answer down (good answers fell 73->59, 77->57 at the weight
+      that suppressed reworded ones), ask ONE question that covers both -
+      "does this answer make the riddle true AND isn't just the riddle
+      reworded".
+      That would keep it at one model call and leave genuine answers alone.
+
+      Also tests declarative vs interrogative, because that mattered more
+      than expected: "This answer makes the riddle X true." scored real good
+      answers at 58.2 while the same idea as a question scored 21.3. The
+      model judges whether a STATEMENT holds, so a question nests a question
+      inside a question. The live framing is a question too.
+
+      http://localhost:5173/scripts/riddle-bench/combined-question.html
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime } from "/src/judge.js";
+      import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
+      import { noul } from "open-jev";
+      import { RIDDLES } from "/scripts/riddle-bench/cases.mjs";
+      import { REAL_RIDDLE_1, REAL_RIDDLE_2 } from "/scripts/riddle-bench/real-answers.mjs";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, dtype: null, rows: [], error: null };
+
+      const FRAMINGS = {
+        // what is live today, for reference
+        liveQuestion: (r) =>
+          `Is the answer a plausible interpretation of the riddle "${r}" that resolves its apparent contradiction?`,
+        // the best single framing found so far: same idea, stated not asked
+        plainDecl: (r) => `This answer makes the riddle "${r}" true.`,
+        // jacob's combined idea, several ways of putting it
+        bothPlain: (r) => `This answer makes the riddle "${r}" true, and is not just the riddle reworded.`,
+        bothNaming: (r) =>
+          `This answer names something that makes the riddle "${r}" true, rather than restating the riddle.`,
+        bothNotRepeat: (r) =>
+          `This answer makes the riddle "${r}" true without repeating the riddle's own wording.`,
+        bothReal: (r) => `This is a real answer to the riddle "${r}", not a rewording of it.`,
+        // a version that leans on "names a thing", which was the single
+        // strongest parrot signal in earlier tests
+        bothThing: (r) => `This answer is a thing that the riddle "${r}" is true of, not a description of the riddle.`,
+      };
+
+      const cases = [];
+      for (const r of RIDDLES)
+        for (const c of r.cases)
+          cases.push({ set: "invented", group: r.id, prompt: r.prompt, tier: c.tier, answer: c.answer });
+      for (const [i, rr] of [REAL_RIDDLE_1, REAL_RIDDLE_2].entries())
+        for (const c of rr.cases)
+          cases.push({ set: "real", group: `real${i + 1}`, prompt: rr.prompt, tier: c.tier, answer: c.answer });
+      // the reworded-riddle cases, which are what this has to catch
+      const PARA = [
+        ["What becomes safer the more people know it?", [
+          "something that is more safe as greater number of individuals are aware of it",
+          "a thing whose safety grows as more persons learn of it",
+          "it gets less dangerous once additional people find out",
+        ], ["a password that has been changed", "a whistleblower's evidence", "an open secret"]],
+        ["What can you break without touching it?", [
+          "something you can shatter while never making contact with it",
+          "a thing broken with no physical touch involved",
+        ], ["a promise", "a silence", "a world record"]],
+        ["What travels without moving?", [
+          "a thing that journeys while remaining stationary",
+          "something which goes places yet never shifts position",
+        ], ["a rumour", "news", "a smell"]],
+      ];
+      for (const [i, [prompt, par, gen]] of PARA.entries()) {
+        for (const a of par) cases.push({ set: "paraphrase", group: `para${i}`, prompt, tier: 8, answer: a });
+        for (const a of gen) cases.push({ set: "paraphrase", group: `para${i}`, prompt, tier: 2, answer: a });
+      }
+
+      try {
+        const jev = await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`phase downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        out.device = judgeRuntime()?.device;
+        out.dtype = judgeRuntime()?.dtype;
+        log(`backend ${out.device}/${out.dtype}`);
+        const ask = async (state, statement) => {
+          const [v] = await jev.decide(canonicalizeForJudge(state), [noul(statement)]);
+          return v.probability * 100;
+        };
+        for (const [name, build] of Object.entries(FRAMINGS)) {
+          for (const c of cases) out.rows.push({ ...c, framing: name, score: await ask(c.answer, build(c.prompt)) });
+          log(`framing ${name} DONE`);
+        }
+        log(`ALL DONE ${out.rows.length} rows`);
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED ${out.error}`);
+      }
+      window.__CQ__ = out;
+      window.__CQ_DONE__ = true;
+    </script>
+  </body>
+</html>

@@ -52,7 +52,7 @@
  */
 
 import { OpenJev, noul } from "open-jev";
-import { assertNoul, scoreFromNoul } from "@shared/challenges.js";
+import { assertNoul, combineNoul, scoreFromNoul } from "@shared/challenges.js";
 import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
 import { loadJudgeWasm } from "./judge-wasm.js";
 import { isServerJudgeReachable, createServerJev, judgeViaServer } from "./judge-server.js";
@@ -316,7 +316,7 @@ export function judgeRuntime() {
  * Returns { noul, score, model, device, ms }. `score` is full precision
  * (noul * 100); nothing here rounds it.
  */
-export async function scoreAnswer({ answer, statement }) {
+export async function scoreAnswer({ answer, statement, penaltyStatement = null, penaltyExponent = 0 }) {
   const jev = await loadJudge();
   const started = performance.now();
 
@@ -326,14 +326,33 @@ export async function scoreAnswer({ answer, statement }) {
     // place in the pipeline) - sending the raw answer here, not
     // canonicalizeForJudge(answer), avoids applying it with a different
     // input than what the server actually scores.
+    //
+    // This path cannot do the second judgement: it is deliberately sent no
+    // statement at all (the server derives the riddle itself, so a client
+    // cannot choose what its answer is judged against), so it always returns
+    // the single-question score. It is unreachable in production - the Pages
+    // build leaves VITE_SERVER_JUDGE_BASE_URL unset, so the URL resolves to
+    // localhost - but if it is ever switched on, the server needs the same
+    // two-question scoring before it can be used with v5.
     probability = assertNoul(await judgeViaServer({ answer }));
   } else {
-    const [verdict] = await jev.decide(canonicalizeForJudge(answer), [noul(statement)]);
+    const state = canonicalizeForJudge(answer);
+    const [verdict] = await jev.decide(state, [noul(statement)]);
     if (!verdict || verdict.type !== "noul") {
       throw new Error("The judge returned an unexpected answer type.");
     }
-    // p(yes). Validated before it can become a score.
-    probability = assertNoul(verdict.probability);
+    let penalty = 0;
+    if (penaltyStatement && penaltyExponent) {
+      // A second forward pass over the same answer: does it describe the
+      // riddle rather than answer it. Asked separately because asking both
+      // in one question does not work - see SCORING_VERSIONS.
+      const [penaltyVerdict] = await jev.decide(state, [noul(penaltyStatement)]);
+      if (!penaltyVerdict || penaltyVerdict.type !== "noul") {
+        throw new Error("The judge returned an unexpected answer type.");
+      }
+      penalty = assertNoul(penaltyVerdict.probability);
+    }
+    probability = combineNoul(verdict.probability, penalty, penaltyExponent);
   }
 
   return {
