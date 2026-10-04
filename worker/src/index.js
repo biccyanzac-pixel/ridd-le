@@ -66,6 +66,67 @@ const CHALLENGE_SLUGS = [
   "enter-without-going-in",
   "behind-before-passed",
   "more-true-when-stop-believing",
+  "break-without-touching",
+  "hold-without-hands",
+  "lose-by-looking",
+  "keep-by-giving-away",
+  "heavier-when-empty",
+  "louder-in-silence",
+  "grows-by-being-cut",
+  "arrive-without-travelling",
+  "yours-until-you-use-it",
+  "follows-faster-when-you-run",
+  "true-only-while-unsaid",
+  "won-by-losing",
+  "ends-when-you-notice-it",
+  "built-by-taking-away",
+  "shared-without-dividing",
+  "strongest-before-tested",
+  "travels-without-moving",
+  "fills-by-emptying",
+  "worth-more-unopened",
+  "runs-without-legs",
+  "answer-that-asks",
+  "closer-the-further-you-go",
+  "same-no-matter-how-you-turn-it",
+  "costs-nothing-expensive",
+  "known-only-by-absence",
+  "finished-but-never-done",
+  "older-than-its-parts",
+  "safer-when-shared",
+  "carries-you-while-you-carry-it",
+  "right-only-once",
+  "waiting-that-moves",
+  "empty-and-full",
+  "cheaper-the-longer-you-wait",
+  "lighter-the-more-you-add",
+  "hidden-in-plain-sight",
+  "yours-but-others-use-it-more",
+  "broken-to-be-useful",
+  "forgotten-to-be-kept",
+  "stops-when-you-chase-it",
+  "true-for-everyone-nobody",
+  "given-without-having",
+  "longer-the-shorter-it-gets",
+  "visible-only-from-inside",
+  "counts-by-not-counting",
+  "earlier-the-later-you-start",
+  "wrong-because-everyone-agrees",
+  "returns-without-leaving",
+];
+
+// Rotations, newest first - must stay byte-identical in dates, order and
+// slugs to shared/challenges.js ROTATIONS. A day picks its riddle by (day
+// modulo list length), so a longer list changes which riddle every PAST day
+// had. Expanding it from a date instead leaves those days resolving through
+// the rotation that was live when they were played, so their stored
+// submissions stay reachable.
+const ROTATIONS = [
+  { from: "2026-10-04", slugs: CHALLENGE_SLUGS },
+  {
+    from: "0000-01-01",
+    slugs: ["enter-without-going-in", "behind-before-passed", "more-true-when-stop-believing"],
+  },
 ];
 
 // The bonus round's slug/version. Must stay byte-identical to
@@ -127,8 +188,10 @@ function todayKey(now = new Date()) {
  * for the same UTC day. */
 function slugForDay(dayKey) {
   const day = Math.floor(Date.parse(`${dayKey}T00:00:00Z`) / 86_400_000);
-  const index = ((day % CHALLENGE_SLUGS.length) + CHALLENGE_SLUGS.length) % CHALLENGE_SLUGS.length;
-  return CHALLENGE_SLUGS[index];
+  const rotation = ROTATIONS.find((r) => dayKey >= r.from) ?? ROTATIONS[ROTATIONS.length - 1];
+  const { slugs } = rotation;
+  const index = ((day % slugs.length) + slugs.length) % slugs.length;
+  return slugs[index];
 }
 
 function challengeIdForDay(dayKey) {
@@ -137,8 +200,21 @@ function challengeIdForDay(dayKey) {
 
 /** The bonus round's id for a day - same shape as challengeIdForDay, no
  * rotation needed here (the worker never needs to know the actual word). */
+// Must stay byte-identical in dates and versions to shared/challenges.js's
+// BONUS_VERSIONS. The worker never needs the judging question itself, only
+// the version that forms the day's id.
+const BONUS_VERSIONS = [
+  { from: "2026-10-04", version: 2 },
+  { from: "0000-01-01", version: 1 },
+];
+
+function bonusVersionForDay(dayKey) {
+  return (BONUS_VERSIONS.find((v) => dayKey >= v.from) ?? BONUS_VERSIONS[BONUS_VERSIONS.length - 1])
+    .version;
+}
+
 function bonusChallengeIdForDay(dayKey) {
-  return `${BONUS_SLUG}@v${BONUS_SCORING_VERSION}:${dayKey}`;
+  return `${BONUS_SLUG}@v${bonusVersionForDay(dayKey)}:${dayKey}`;
 }
 
 function validateName(raw) {
@@ -453,7 +529,10 @@ async function handlePlay(request, env, ip) {
     );
   }
   const expectedChallengeId = kind === "main" ? expectedMainId : expectedBonusId;
-  const scoringVersion = kind === "main" ? SCORING_VERSION : BONUS_SCORING_VERSION;
+  // Taken from the day, not a bare constant: the bonus round's version moves
+  // on a date (see BONUS_VERSIONS), and the answer hash folds it in, so a
+  // mismatch here would reject every submission for that day.
+  const scoringVersion = kind === "main" ? SCORING_VERSION : bonusVersionForDay(day);
 
   if (kind === "bonus") {
     // The bonus round has no archive/replay - it only ever exists for
@@ -507,6 +586,23 @@ async function handlePlay(request, env, ip) {
   }
 
   const model = typeof body.model === "string" && body.model ? body.model.slice(0, 120) : "unknown";
+
+  // The q4 and q4f16 builds of the same model disagree enormously - "a
+  // competition" scored 91.83 on q4 and 48.24 on q4f16 for the same riddle,
+  // and "a room" 72.41 against 41.49. The client pins q4 so every player
+  // gets the same number, but a browser running a cached bundle from before
+  // that pin still auto-selects q4f16 and its scores are not comparable with
+  // anyone else's on the same board. Rejecting those asks for a refresh
+  // instead, which loads the pinned build. Matched narrowly on the exact
+  // string so nothing else can trip it.
+  if (model.includes("q4f16")) {
+    return fail(
+      "stale_build",
+      "Your page is out of date and would score differently. Refresh and try again.",
+      409,
+      env,
+    );
+  }
 
   // A player cannot submit the same (normalized) answer twice for the same
   // challenge - checked here, server-side, before an attempt number is ever

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Framing test on real player answers</title>
+  </head>
+  <body>
+    <!--
+      Scores REAL production answers under candidate framings, on the backend
+      players actually get. Two questions:
+        - does any framing order real answers sensibly (the shipped one puts
+          "nothing" above "off the grid" and "ethernet cable")
+        - does any framing give good answers genuinely high numbers, rather
+          than everything landing near zero
+
+      http://localhost:5173/scripts/riddle-bench/real-collect.html
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime } from "/src/judge.js";
+      import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
+      import { noul } from "open-jev";
+      import {
+        REAL_BONUS,
+        REAL_RIDDLE_1,
+        REAL_RIDDLE_2,
+        BONUS_FRAMINGS,
+        RIDDLE_FRAMINGS,
+      } from "/scripts/riddle-bench/real-answers.mjs";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, dtype: null, bonus: [], riddle: [], error: null };
+
+      try {
+        const jev = await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        out.device = judgeRuntime()?.device;
+        out.dtype = judgeRuntime()?.dtype;
+        log(`backend ${out.device}/${out.dtype}`);
+
+        const ask = async (state, statement) => {
+          const [v] = await jev.decide(canonicalizeForJudge(state), [noul(statement)]);
+          return v.probability * 100;
+        };
+
+        for (const [name, build] of Object.entries(BONUS_FRAMINGS)) {
+          const statement = build(REAL_BONUS.prompt);
+          for (const c of REAL_BONUS.cases) {
+            out.bonus.push({ framing: name, tier: c.tier, answer: c.answer, score: await ask(c.answer, statement) });
+          }
+          log(`bonus framing ${name}: done`);
+        }
+
+        for (const riddle of [REAL_RIDDLE_1, REAL_RIDDLE_2]) {
+          for (const [name, build] of Object.entries(RIDDLE_FRAMINGS)) {
+            const statement = build(riddle.prompt);
+            for (const c of riddle.cases) {
+              out.riddle.push({
+                group: riddle.prompt,
+                framing: name,
+                tier: c.tier,
+                answer: c.answer,
+                score: await ask(c.answer, statement),
+              });
+            }
+          }
+          log(`riddle "${riddle.prompt.slice(0, 30)}…": done`);
+        }
+        log(`ALL DONE: ${out.bonus.length} bonus rows, ${out.riddle.length} riddle rows`);
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED: ${out.error}`);
+      }
+      window.__REAL__ = out;
+      window.__REAL_DONE__ = true;
+    </script>
+  </body>
+</html>

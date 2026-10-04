@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Big framing test</title>
+  </head>
+  <body>
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime } from "/src/judge.js";
+      import { canonicalizeForJudge } from "@shared/judge-canonicalize.js";
+      import { noul } from "open-jev";
+      import { OPPOSITE_CASES } from "/scripts/riddle-bench/bonus-cases.mjs";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, dtype: null, parrot: [], bonus: [], error: null };
+
+      // --- part 1: answers to the live riddle, including jacob's three real
+      // ones that the word-gate let through, plus genuine answers that must
+      // NOT be flagged.
+      const LIVE_RIDDLE = "What can become more true when you stop believing it?";
+      const PARROT_CASES = [
+        // jacob's real live submissions - scored 73.98 / 70.27 / 79.87
+        { answer: "the truth that could become exceedingly more truthful if you were to", isParrot: true },
+        { answer: "the truth", isParrot: true },
+        { answer: "the belief that truth", isParrot: true },
+        // more echoing, same riddle
+        { answer: "believing it less makes it more true", isParrot: true },
+        { answer: "it becomes more true when belief stops", isParrot: true },
+        // genuine answers that must stay unflagged
+        { answer: "a superstition", isParrot: false },
+        { answer: "a placebo wearing off", isParrot: false },
+        { answer: "your own limits", isParrot: false },
+        { answer: "a rumour nobody repeats", isParrot: false },
+        { answer: "stage fright", isParrot: false },
+        { answer: "the strength of a habit", isParrot: false },
+      ];
+      const PARROT_FRAMINGS = {
+        shippedQuality: (r) =>
+          `Is the answer a plausible interpretation of the riddle "${r}" that resolves its apparent contradiction?`,
+        restates: (r) => `This is a restatement of the riddle "${r}", not an answer to it.`,
+        echoesWords: (r) => `The answer only echoes words that already appear in the riddle "${r}".`,
+        namesNothing: (r) => `The answer does not name any thing; it just talks about the riddle "${r}".`,
+        isAThing: () => `The answer names a thing.`,
+      };
+
+      // --- part 2: the bonus framings across every prompt
+      const BONUS_FRAMINGS = {
+        shipped: (p) => `Is the answer a plausible opposite of "${p}"?`,
+        opposedMeaning: (p) => `This has the opposite meaning to "${p}".`,
+        without: (p) => `This is what you have when you have no "${p}".`,
+        insteadOf: (p) => `Someone who has no "${p}" has this instead.`,
+      };
+
+      try {
+        const jev = await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`phase downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        out.device = judgeRuntime()?.device;
+        out.dtype = judgeRuntime()?.dtype;
+        log(`backend ${out.device}/${out.dtype}`);
+        const ask = async (state, statement) => {
+          const [v] = await jev.decide(canonicalizeForJudge(state), [noul(statement)]);
+          return v.probability * 100;
+        };
+
+        for (const [name, build] of Object.entries(PARROT_FRAMINGS)) {
+          const statement = build(LIVE_RIDDLE);
+          for (const c of PARROT_CASES) {
+            out.parrot.push({ framing: name, answer: c.answer, isParrot: c.isParrot, score: await ask(c.answer, statement) });
+          }
+          log(`parrot framing ${name} DONE`);
+        }
+
+        for (const [name, build] of Object.entries(BONUS_FRAMINGS)) {
+          for (const item of OPPOSITE_CASES) {
+            const statement = build(item.prompt);
+            for (const c of item.cases) {
+              out.bonus.push({
+                framing: name,
+                prompt: item.prompt,
+                kind: item.kind,
+                tier: c.tier,
+                answer: c.answer,
+                score: await ask(c.answer, statement),
+              });
+            }
+          }
+          log(`bonus framing ${name} DONE`);
+        }
+        log(`ALL DONE ${out.parrot.length} parrot rows, ${out.bonus.length} bonus rows`);
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED ${out.error}`);
+      }
+      window.__BIG__ = out;
+      window.__BIG_DONE__ = true;
+    </script>
+  </body>
+</html>

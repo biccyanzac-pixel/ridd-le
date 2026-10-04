@@ -64,6 +64,296 @@ export const CHALLENGES = [
     prompt: "What can become more true when you stop believing it?",
     example: "a superstition",
   },
+
+  // --- Added 2026-10-04. The three riddles above had been cycling every
+  // third day since launch, so players saw the same riddle twice a week.
+  // These only enter the rotation from ROTATIONS' switch date onward: the
+  // rotation indexes by (day modulo list length), so lengthening the list
+  // retroactively changes which riddle a past day had, which would point
+  // that day at a challenge id holding no submissions and blank its
+  // leaderboard.
+  {
+    slug: "break-without-touching",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can you break without touching it?",
+    example: "a promise",
+  },
+  {
+    slug: "hold-without-hands",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can you hold without using your hands?",
+    example: "a grudge",
+  },
+  {
+    slug: "lose-by-looking",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What do you lose by looking for it?",
+    example: "sleep",
+  },
+  {
+    slug: "keep-by-giving-away",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What do you keep only by giving it away?",
+    example: "trust",
+  },
+  {
+    slug: "heavier-when-empty",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What feels heavier once it's empty?",
+    example: "a house",
+  },
+  {
+    slug: "louder-in-silence",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What gets louder the quieter a room becomes?",
+    example: "a doubt",
+  },
+  {
+    slug: "grows-by-being-cut",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What grows by being cut back?",
+    example: "a hedge",
+  },
+  {
+    slug: "arrive-without-travelling",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can arrive without having travelled?",
+    example: "bad news",
+  },
+  {
+    slug: "yours-until-you-use-it",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What stops being yours the moment you use it?",
+    example: "a secret",
+  },
+  {
+    slug: "follows-faster-when-you-run",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What follows you faster the quicker you run from it?",
+    example: "a reputation",
+  },
+  {
+    slug: "true-only-while-unsaid",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What stays true only while nobody says it out loud?",
+    example: "a surprise",
+  },
+  {
+    slug: "won-by-losing",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can you win by losing?",
+    example: "an argument",
+  },
+  {
+    slug: "ends-when-you-notice-it",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What ends the moment you notice it?",
+    example: "a dream",
+  },
+  {
+    slug: "built-by-taking-away",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What is built entirely by taking things away?",
+    example: "a sculpture",
+  },
+  {
+    slug: "shared-without-dividing",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can be shared without being divided?",
+    example: "an idea",
+  },
+  {
+    slug: "strongest-before-tested",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What is strongest before it has ever been tested?",
+    example: "a belief",
+  },
+  {
+    slug: "travels-without-moving",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What travels without moving?",
+    example: "a rumour",
+  },
+  {
+    slug: "fills-by-emptying",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What fills up as you empty it?",
+    example: "a diary",
+  },
+  {
+    slug: "worth-more-unopened",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What is worth more while it stays unopened?",
+    example: "a gift",
+  },
+  {
+    slug: "runs-without-legs",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can run for years without ever moving?",
+    example: "a contract",
+  },
+  {
+    slug: "answer-that-asks",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What answer only creates more questions?",
+    example: "a diagnosis",
+  },
+  {
+    slug: "closer-the-further-you-go",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What gets closer the further you walk away?",
+    example: "the horizon behind you",
+  },
+  {
+    slug: "same-no-matter-how-you-turn-it",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What stays the same however you turn it around?",
+    example: "the truth of a number",
+  },
+  {
+    slug: "costs-nothing-expensive",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What costs nothing yet nobody can afford to lose?",
+    example: "a reputation",
+  },
+  {
+    slug: "known-only-by-absence",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can you only notice once it is gone?",
+    example: "a background noise",
+  },
+  {
+    slug: "finished-but-never-done",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can be finished and still never done?",
+    example: "an apology",
+  },
+  {
+    slug: "older-than-its-parts",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What is older than everything it is made of?",
+    example: "a tradition",
+  },
+  {
+    slug: "safer-when-shared",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What becomes safer the more people know it?",
+    example: "a password that has been changed",
+  },
+  {
+    slug: "carries-you-while-you-carry-it",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What carries you while you are carrying it?",
+    example: "a habit",
+  },
+  {
+    slug: "right-only-once",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can only ever be right once?",
+    example: "a first impression",
+  },
+  {
+    slug: "waiting-that-moves",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What moves only while you are waiting for it?",
+    example: "a queue",
+  },
+  {
+    slug: "empty-and-full",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What is completely empty and completely full at once?",
+    example: "a day off",
+  },
+  {
+    slug: "cheaper-the-longer-you-wait",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What gets cheaper the longer you refuse to buy it?",
+    example: "last year's phone",
+  },
+  {
+    slug: "lighter-the-more-you-add",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What gets lighter the more you put into it?",
+    example: "a confession",
+  },
+  {
+    slug: "hidden-in-plain-sight",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What is hardest to find when it is in plain sight?",
+    example: "a motive",
+  },
+  {
+    slug: "yours-but-others-use-it-more",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What is yours, but other people use it more than you do?",
+    example: "your name",
+  },
+  {
+    slug: "broken-to-be-useful",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What has to be broken before it is any use?",
+    example: "an egg",
+  },
+  {
+    slug: "forgotten-to-be-kept",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What do you only truly keep once you have forgotten it?",
+    example: "a language you grew up with",
+  },
+  {
+    slug: "stops-when-you-chase-it",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What stops the instant you chase it?",
+    example: "a hiccup",
+  },
+  {
+    slug: "true-for-everyone-nobody",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What is true for everyone and useful to nobody?",
+    example: "an average",
+  },
+  {
+    slug: "given-without-having",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can you give away without ever having had it?",
+    example: "advice",
+  },
+  {
+    slug: "longer-the-shorter-it-gets",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What feels longer the shorter it gets?",
+    example: "a deadline",
+  },
+  {
+    slug: "visible-only-from-inside",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What can only be seen from inside it?",
+    example: "a mood",
+  },
+  {
+    slug: "counts-by-not-counting",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What only counts while nobody is counting it?",
+    example: "a favour",
+  },
+  {
+    slug: "earlier-the-later-you-start",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What ends earlier the later you begin it?",
+    example: "a night's sleep",
+  },
+  {
+    slug: "wrong-because-everyone-agrees",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What becomes wrong precisely because everyone agrees with it?",
+    example: "a crowded trade",
+  },
+  {
+    slug: "returns-without-leaving",
+    scoringVersion: SCORING_VERSION,
+    prompt: "What comes back without ever having left?",
+    example: "a memory",
+  },
 ];
 
 /** First day this game had a riddle - the start of the archive's range.
@@ -94,6 +384,33 @@ export function msUntilNextDay(now = new Date()) {
 }
 
 /**
+ * Which riddles are in the rotation, and from when.
+ *
+ * Newest entry first. A day's riddle is picked by (day modulo list length),
+ * so lengthening the list changes which riddle EVERY past day had - which
+ * would point each of those days at a challenge id holding no submissions
+ * and blank its leaderboard, the gallery and the archive. So each expansion
+ * takes effect from a date, and days before it keep resolving through the
+ * rotation that was live when they were played. Nothing is ever recomputed
+ * retroactively.
+ */
+const ROTATIONS = [
+  { from: "2026-10-04", slugs: CHALLENGES.map((c) => c.slug) },
+  // Launch: the only three riddles that existed, cycling every third day.
+  {
+    from: "0000-01-01",
+    slugs: ["enter-without-going-in", "behind-before-passed", "more-true-when-stop-believing"],
+  },
+];
+
+const BY_SLUG = new Map(CHALLENGES.map((c) => [c.slug, c]));
+
+/** The rotation in force on a given UTC day. */
+function rotationForDay(dayKey) {
+  return ROTATIONS.find((r) => dayKey >= r.from) ?? ROTATIONS[ROTATIONS.length - 1];
+}
+
+/**
  * Which definition is scheduled for a UTC day, and the "Daily #N" to show.
  *
  * These two are deliberately anchored DIFFERENTLY, which looks like an
@@ -117,9 +434,10 @@ export function msUntilNextDay(now = new Date()) {
 export function definitionForDay(dayKey) {
   const day = Math.floor(Date.parse(`${dayKey}T00:00:00Z`) / 86_400_000);
   if (!Number.isFinite(day)) throw new TypeError(`bad day key: ${dayKey}`);
-  const index = ((day % CHALLENGES.length) + CHALLENGES.length) % CHALLENGES.length;
+  const { slugs } = rotationForDay(dayKey);
+  const index = ((day % slugs.length) + slugs.length) % slugs.length;
   const launchDay = Math.floor(Date.parse(`${LAUNCH_DAY}T00:00:00Z`) / 86_400_000);
-  return { definition: CHALLENGES[index], dayNumber: day - launchDay + 1 };
+  return { definition: BY_SLUG.get(slugs[index]), dayNumber: day - launchDay + 1 };
 }
 
 /** Stable and deterministic: the same day and config always give this id. */
@@ -207,15 +525,53 @@ export function opposingWordForDay(dayKey) {
  * worker's handlePlay() recomputes this independently (via its own
  * bonusChallengeIdForDay(), never trusted from the client) and never needs
  * the word itself, only this id, to validate and store a submission. */
+/**
+ * How the bonus round is judged, by the UTC day it takes effect - newest
+ * first, same dated-switch reasoning as ROTATIONS.
+ *
+ * v1's question ranked real answers worse than chance (36% on the nine
+ * answers players gave for "wifi", with "nothing" beating both "off the
+ * grid" and "ethernet cable", and every score crushed into 0-11). v2's was
+ * measured across all eight benchmark prompts at 62% with no prompt below
+ * 58% - weak, but consistent and a clear improvement.
+ *
+ * A question change means the score means something different, so the
+ * version moves with it and the day's challenge id changes - which is what
+ * stops two incompatible scales sharing one board. Earlier days keep v1 and
+ * keep their results.
+ *
+ * Worth recording what did NOT survive measurement: "This is what you have
+ * when you have no X" scored 81% on the wifi prompt and looked like the
+ * answer, then fell to 52% across all eight prompts - 38% on nostalgia, 35%
+ * on "a promise you intend to keep". It was a single-prompt fluke.
+ */
+const BONUS_VERSIONS = [
+  {
+    from: "2026-10-04",
+    version: 2,
+    statement: (word) => `This has the opposite meaning to "${word}".`,
+  },
+  {
+    from: "0000-01-01",
+    version: 1,
+    statement: (word) => `Is the answer a plausible opposite of "${word}"?`,
+  },
+];
+
+function bonusVersionForDay(dayKey) {
+  return BONUS_VERSIONS.find((v) => dayKey >= v.from) ?? BONUS_VERSIONS[BONUS_VERSIONS.length - 1];
+}
+
 export function bonusChallengeForDay(dayKey = todayKey()) {
   const word = opposingWordForDay(dayKey);
+  const { version, statement } = bonusVersionForDay(dayKey);
   return {
     word,
     dayKey,
-    scoringVersion: BONUS_SCORING_VERSION,
-    id: challengeId(BONUS_SLUG, BONUS_SCORING_VERSION, dayKey),
+    scoringVersion: version,
+    id: challengeId(BONUS_SLUG, version, dayKey),
     prompt: `What's the opposite of "${word}"?`,
-    noulStatement: `Is the answer a plausible opposite of "${word}"?`,
+    noulStatement: statement(word),
   };
 }
 
