@@ -9,6 +9,7 @@ import {
   formatScore,
   msUntilNextDay,
   previousDayKey,
+  statementsForVersion,
   todayKey,
   validateAnswer,
   validateName,
@@ -203,6 +204,26 @@ const el = {
 }
 
 const challenge = challengeForDay(todayKey());
+
+// Local development only: VITE_SCORING_VERSION tries a scoring version before
+// its date arrives, so a change can be played against today's riddle instead
+// of waiting for midnight UTC. It swaps only the QUESTIONS - the challenge id
+// and the version in the answer hash still come from the day, so the worker
+// accepts the submission exactly as it would any other. Unset in a real
+// build, which is why production can never take this path.
+{
+  const forced = Number(import.meta.env?.VITE_SCORING_VERSION);
+  if (forced && forced !== challenge.scoringVersion) {
+    const s = statementsForVersion(forced, challenge.prompt);
+    challenge.noulStatement = s.noulStatement;
+    challenge.penaltyStatement = s.penaltyStatement;
+    challenge.penaltyExponent = s.penaltyExponent;
+    console.warn(
+      `[dev] scoring with v${forced} questions (${s.penaltyStatement ? 2 : 1} model call(s)); ` +
+        `the board is still v${challenge.scoringVersion}, so scores here are not comparable with production.`,
+    );
+  }
+}
 
 // The player's attempts at today's riddle, authoritative copy once a backend
 // is configured (reconciled from the server on load and after every submit),

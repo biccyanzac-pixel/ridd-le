@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Dev override check</title>
+  </head>
+  <body>
+    <!--
+      Confirms the local dev override actually scores today's riddle with the
+      new two-question logic, using jacob's real exploit answer. Reproduces
+      exactly what main.js does when VITE_SCORING_VERSION is set.
+    -->
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import { loadJudge, judgeRuntime, scoreAnswer } from "/src/judge.js";
+      import { challengeForDay, statementsForVersion, todayKey } from "@shared/challenges.js";
+      import { looksLikeOwnInterpretation, looksLikeRealText } from "@shared/gibberish.js";
+
+      const log = (s) => {
+        document.getElementById("log").textContent += "\n" + s;
+        console.log(s);
+      };
+      const out = { device: null, env: null, rows: [], error: null };
+
+      try {
+        await loadJudge({
+          onPhase: ({ phase, progress }) => {
+            if (phase === "downloading" && progress != null) log(`phase downloading ${Math.round(progress * 100)}%`);
+          },
+        });
+        out.device = judgeRuntime()?.device;
+        out.env = import.meta.env?.VITE_SCORING_VERSION ?? null;
+
+        const c = challengeForDay(todayKey());
+        out.dayVersion = c.scoringVersion;
+        out.prompt = c.prompt;
+        // same override main.js applies
+        const forced = Number(import.meta.env?.VITE_SCORING_VERSION);
+        let statements = { noulStatement: c.noulStatement, penaltyStatement: c.penaltyStatement, penaltyExponent: c.penaltyExponent };
+        if (forced && forced !== c.scoringVersion) statements = statementsForVersion(forced, c.prompt);
+        out.calls = statements.penaltyStatement ? 2 : 1;
+        log(`today: ${c.prompt}`);
+        log(`board version v${c.scoringVersion}, VITE_SCORING_VERSION=${out.env}, calls=${out.calls}`);
+
+        const ANSWERS = [
+          { a: "something that is more safe as greater number of individuals are aware of it", k: "jacob's exploit" },
+          { a: "a thing that is safer once more people are aware of it", k: "reworded" },
+          { a: "a password that has been changed", k: "genuine" },
+          { a: "an open secret", k: "genuine" },
+          { a: "a whistleblower's evidence", k: "genuine" },
+        ];
+        for (const { a, k } of ANSWERS) {
+          const gate =
+            looksLikeRealText(a) && looksLikeOwnInterpretation(a, c.prompt) ? "passes gate" : "BLOCKED by gate";
+          const old = await scoreAnswer({ answer: a, statement: c.noulStatement });
+          const now = await scoreAnswer({
+            answer: a,
+            statement: statements.noulStatement,
+            penaltyStatement: statements.penaltyStatement,
+            penaltyExponent: statements.penaltyExponent,
+          });
+          out.rows.push({ a, k, gate, old: old.score, now: now.score });
+          log(`  ${k.padEnd(16)} old ${old.score.toFixed(1).padStart(5)}  new ${now.score.toFixed(1).padStart(5)}  ${gate}`);
+        }
+        log("ALL DONE");
+      } catch (err) {
+        out.error = `${err?.name}: ${err?.message}`;
+        log(`FAILED ${out.error}`);
+      }
+      window.__DEV__ = out;
+      window.__DEV_DONE__ = true;
+    </script>
+  </body>
+</html>

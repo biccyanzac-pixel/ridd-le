@@ -33,6 +33,10 @@ export default defineConfig({
       input: {
         main: path.join(here, "index.html"),
         "mem-test": path.join(here, "mem-test.html"),
+        // The sandbox: judge any riddle unlimited times, nothing submitted.
+        // Built for production too, reachable at /sandbox.html, but never
+        // linked from the game and marked noindex.
+        sandbox: path.join(here, "sandbox.html"),
       },
     },
   },

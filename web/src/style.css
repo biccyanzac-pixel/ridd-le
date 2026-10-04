@@ -898,3 +898,57 @@ textarea:focus-visible,
 .bonus-board .rows {
   margin-top: 0.5rem;
 }
+
+/* --- sandbox ------------------------------------------------------------- */
+
+.card select,
+#custom-riddle {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  width: 100%;
+}
+
+.sandbox-questions {
+  margin: 0.9rem 0 0.2rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.sandbox-questions summary {
+  cursor: pointer;
+}
+
+.sandbox-q {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.sandbox-detail {
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sandbox-clear {
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.sandbox-clear:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}

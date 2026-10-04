@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sandbox — jacob.gg</title>
+    <meta name="description" content="Try the judge on any riddle, as many times as you like. Nothing is submitted." />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="robots" content="noindex" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://huggingface.co" />
+    <link rel="preconnect" href="https://cdn-lfs.huggingface.co" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <a class="wordmark" href="./">jacob<span>.gg</span></a>
+      </header>
+
+      <section class="card">
+        <div class="card-top">
+          <span class="eyebrow">Sandbox</span>
+          <span class="eyebrow" id="sandbox-backend"></span>
+        </div>
+        <p class="riddle-note">
+          Judge any riddle as many times as you like. Nothing is submitted and no
+          leaderboard is touched — results live only in this browser.
+        </p>
+
+        <!-- Judge loading, same phases as the game -->
+        <div class="preparing" id="preparing">
+          <div class="preparing-row">
+            <span class="spinner-ring" aria-hidden="true"></span>
+            <span id="preparing-text">Preparing the judge…</span>
+          </div>
+          <div class="meter" role="progressbar" aria-label="Preparing the judge">
+            <div class="meter-fill" id="preparing-bar"></div>
+          </div>
+          <p class="preparing-note" id="preparing-note">
+            One-time download, then cached on this device.
+          </p>
+        </div>
+
+        <div id="sandbox-body" hidden>
+          <label class="field">
+            <span class="label">Riddle</span>
+            <select id="riddle-select"></select>
+          </label>
+
+          <label class="field" id="custom-field" hidden>
+            <span class="label">Your own riddle</span>
+            <input id="custom-riddle" type="text" maxlength="160" placeholder="What can you enter without going in?" />
+          </label>
+
+          <label class="field">
+            <span class="label">Scoring</span>
+            <select id="version-select">
+              <option value="5">v5 — two questions (live from 5 Oct)</option>
+              <option value="4">v4 — one question (the old scoring)</option>
+            </select>
+          </label>
+
+          <details class="sandbox-questions">
+            <summary class="eyebrow">What the judge is being asked</summary>
+            <p class="sandbox-q" id="q1"></p>
+            <p class="sandbox-q" id="q2"></p>
+          </details>
+
+          <form class="play" id="sandbox-play">
+            <label class="field">
+              <span class="label">Your answer</span>
+              <textarea id="sandbox-answer" maxlength="200" rows="2" placeholder="type anything" required></textarea>
+              <span class="counter" id="sandbox-counter">0 / 200</span>
+            </label>
+            <p class="error" id="sandbox-error" role="alert" hidden></p>
+            <button class="submit" id="sandbox-submit" type="submit">
+              <span class="submit-label">Score it</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section class="card" id="results-card" hidden>
+        <div class="card-top">
+          <h2 class="eyebrow">Results, best first</h2>
+          <button type="button" class="sandbox-clear" id="sandbox-clear">Clear</button>
+        </div>
+        <p class="riddle-note" id="results-note"></p>
+        <ol class="rows" id="sandbox-rows"></ol>
+      </section>
+
+      <footer class="footer">
+        <p>Sandbox — nothing here is submitted or scored against anyone.</p>
+      </footer>
+    </main>
+
+    <script type="module" src="/src/sandbox.js"></script>
+  </body>
+</html>

@@ -494,6 +494,22 @@ function scoringForDay(dayKey) {
   return SCORING_VERSIONS.find((v) => dayKey >= v.from) ?? SCORING_VERSIONS[SCORING_VERSIONS.length - 1];
 }
 
+/**
+ * The questions a given scoring version asks, for a riddle - regardless of
+ * which day it is. Only used so local development can try a version before
+ * its date arrives; the game itself always goes through challengeForDay,
+ * which picks the version from the day and never from a caller.
+ */
+export function statementsForVersion(version, prompt) {
+  const scoring = SCORING_VERSIONS.find((v) => v.version === version);
+  if (!scoring) throw new Error(`no such scoring version: ${version}`);
+  return {
+    noulStatement: scoring.statement(prompt),
+    penaltyStatement: scoring.penaltyStatement ? scoring.penaltyStatement(prompt) : null,
+    penaltyExponent: scoring.penaltyExponent,
+  };
+}
+
 /** The scoring version in force on a UTC day. Day-derived, never a bare
  * constant, so a past day keeps the version it was played under. */
 export function scoringVersionForDay(dayKey) {
