@@ -1,6 +1,6 @@
-# jacob.gg — Daily
+# ridd-le — Daily
 
-**▶ [Play today's riddle](https://biccyanzac-pixel.github.io/jacob.gg/)**
+**▶ [Play today's riddle](https://biccyanzac-pixel.github.io/ridd-le/)**
 
 A daily riddle with deliberately no official answer. You propose an
 interpretation, a language model judges whether it makes the riddle true, and

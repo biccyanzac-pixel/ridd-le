@@ -6,9 +6,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
 
 // GitHub Pages serves a project site from /<repo>/, so assets need that prefix.
-// BASE_PATH lets the deploy workflow set it, and "/" is right for local dev and
-// for a custom domain at the apex.
-const base = process.env.BASE_PATH || "/";
+// In GitHub Actions the prefix comes from the repo name, so renaming the repo
+// (jacob.gg -> ridd-le) can't leave a stale path behind; the workflow's
+// BASE_PATH is ignored there. Elsewhere BASE_PATH applies, and "/" is right
+// for local dev and for a custom domain at the apex.
+const ciRepo = process.env.GITHUB_ACTIONS && process.env.GITHUB_REPOSITORY?.split("/")[1];
+const base = ciRepo ? `/${ciRepo}/` : process.env.BASE_PATH || "/";
 
 export default defineConfig({
   base,

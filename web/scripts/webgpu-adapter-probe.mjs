@@ -14,7 +14,7 @@ const EDGE_PATHS = [
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
   "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
 ];
-const url = process.argv[2] || "https://biccyanzac-pixel.github.io/jacob.gg/";
+const url = process.argv[2] || "https://biccyanzac-pixel.github.io/ridd-le/";
 const simulate = process.argv[3];
 
 const browser = await chromium.launch({ executablePath: EDGE_PATHS.find((p) => fs.existsSync(p)), headless: true });

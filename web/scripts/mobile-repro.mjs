@@ -19,7 +19,7 @@
 import { chromium } from "playwright-core";
 import fs from "node:fs";
 
-const URL = process.argv[2] || "https://biccyanzac-pixel.github.io/jacob.gg/";
+const URL = process.argv[2] || "https://biccyanzac-pixel.github.io/ridd-le/";
 const EDGE_PATHS = [
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
   "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
