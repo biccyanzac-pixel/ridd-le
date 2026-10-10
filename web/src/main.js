@@ -333,20 +333,36 @@ function attemptRow(attempt) {
   return li;
 }
 
-/** The name is asked for once and then settled for the day: after the first
- * attempt the field is replaced by a plain "Playing as …" line, since a
- * player's name is already fixed on every row they've submitted and letting
- * them retype it mid-day only invites confusion about which name is theirs. */
+/** The name is asked for once (or reused from another jacob.gg game) and shown
+ * as "Playing as … · change". After the first attempt it is settled for the
+ * day: a player's name is already fixed on every row they've submitted, so
+ * the "change" link goes away. */
+let changingName = false;
 function renderNameField() {
-  const chosen = attempts.length > 0 ? savedName() : "";
-  if (attempts.length === 0 || !chosen) {
+  const chosen = savedName();
+  const settled = attempts.length > 0;
+  if (!chosen || (changingName && !settled)) {
     el.nameField.hidden = false;
     el.playingAs.hidden = true;
     return;
   }
   el.nameField.hidden = true;
+  el.name.value = chosen;
   el.playingAs.hidden = false;
-  el.playingAs.textContent = `Playing as ${chosen}`;
+  el.playingAs.replaceChildren(`Playing as ${chosen}`);
+  if (!settled) {
+    const change = document.createElement("button");
+    change.type = "button";
+    change.className = "jgg-change";
+    change.textContent = "change";
+    change.addEventListener("click", () => {
+      changingName = true;
+      renderNameField();
+      el.name.focus();
+      el.name.select();
+    });
+    el.playingAs.append(" · ", change);
+  }
 }
 
 /** The inline nudge next to the riddle, alongside (not instead of) the
@@ -379,6 +395,9 @@ function renderAttempts() {
 
   const done = hasCompletedToday();
   el.attemptsDone.hidden = !done;
+  const rate = $("rate");
+  rate.hidden = !done;
+  if (done) window.JGG?.rate({ game: "ridd-le", day: challenge.dayKey, mount: rate });
   el.play.hidden = done;
   if (!done) el.attemptNumber.textContent = String(attempts.length + 1);
   updatePlayBonusButton();

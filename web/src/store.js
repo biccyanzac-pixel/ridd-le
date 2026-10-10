@@ -32,15 +32,17 @@ function write(key, value) {
   }
 }
 
+/** This game's saved name, else the name used in any other jacob.gg game (kit/jgg.js). */
 export function savedName() {
   try {
-    return localStorage.getItem(NAME_KEY) ?? "";
+    return localStorage.getItem(NAME_KEY) ?? window.JGG?.name?.() ?? "";
   } catch {
     return "";
   }
 }
 
 export function rememberName(name) {
+  window.JGG?.setName?.(name);
   try {
     localStorage.setItem(NAME_KEY, name);
   } catch {
