@@ -51,6 +51,7 @@ Three things define it:
 | **The riddle** | One per day, rotating, the same for everyone. Changes at 00:00 UTC. |
 | **Attempts** | 3 per player per day. Your daily score is their average. |
 | **Duplicates** | The same answer can't be submitted twice — rejected before it costs you an attempt. |
+| **Same answer, same score** | The first score recorded for an answer (ignoring case, spacing, wrapping quotes and a trailing full stop) is the score for everyone who gives it, so devices can't disagree. Answers that reuse the riddle's words are allowed: the judge marks rewordings down. |
 | **Today's board** | Other players' answer text stays hidden until you've used all 3 of your own attempts, so nobody can crib a strong reading. Ranks and averages are always visible. |
 | **Past days** | Never redacted. Yesterday's strongest interpretations and best average are shown on the page. |
 | **Bonus round** | Unlocks once the riddle is finished: *what's the opposite of X?* Its own 3 guesses, its own leaderboard. |

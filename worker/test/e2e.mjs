@@ -22,10 +22,10 @@
 const BASE = process.argv[2] || "http://127.0.0.1:8788";
 
 const { answerHash, normalizeAnswer } = await import(
-  "file:///C:/Users/jacobp/Desktop/jacob.gg/shared/normalize.js"
+  new URL("../../shared/normalize.js", import.meta.url).href
 );
 const { challengeForDay, scoreFromNoul, averageScore, previousDayKey } = await import(
-  "file:///C:/Users/jacobp/Desktop/jacob.gg/shared/challenges.js"
+  new URL("../../shared/challenges.js", import.meta.url).href
 );
 
 let failures = 0;
@@ -361,6 +361,26 @@ check(
   "a client-invented challenge id is rejected (409 stale_challenge)",
   staleChallenge.status === 409 && staleChallenge.body?.error === "stale_challenge",
 );
+
+// === same answer, same score, whoever gives it ===============================
+// The judge runs in each browser and devices differ slightly; the first score
+// recorded for an answer (as the judge sees it: case, spaces, wrapping quotes
+// and a trailing full stop don't matter) is everyone's score for it.
+const s1 = await session();
+const s2 = await session();
+const first = await play(today, s1.playerId, s1.token, "Sam", "a quiet echo", 0.4861);
+const again = await play(today, s2.playerId, s2.token, "Kim", '"A  Quiet Echo."', 0.5114);
+check("first player scores what their browser judged", first.status === 200 && Math.abs(first.body.result.score - 48.61) < 0.001);
+check(
+  "a second player with the same answer gets the first score, not their own",
+  again.status === 200 && Math.abs(again.body.result.score - 48.61) < 0.001 && again.body.result.matched === true,
+  `score=${again.body?.result?.score}`,
+);
+check("it is stored that way too", Math.abs((again.body.attempts?.[0]?.score ?? -1) - 48.61) < 0.001);
+const differ = await play(today, s2.playerId, s2.token, "Kim", "a quiet echoes", 0.3);
+check("a different answer keeps its own score", differ.status === 200 && Math.abs(differ.body.result.score - 30) < 0.001 && !differ.body.result.matched);
+const repeat = await play(today, s1.playerId, s1.token, "Sam", "A quiet echo", 0.4861);
+check("the same player still can't give the same answer twice", repeat.status === 409 && repeat.body?.error === "duplicate_answer");
 
 console.log(`\n${failures === 0 ? "ALL WORKER CHECKS PASSED" : failures + " CHECK(S) FAILED"}`);
 process.exit(failures === 0 ? 0 : 1);

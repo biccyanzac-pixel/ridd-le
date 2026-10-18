@@ -167,6 +167,25 @@ function normalizeAnswer(text) {
     .normalize("NFKC");
 }
 
+// The text the judge actually sees, ported from shared/judge-canonicalize.js
+// (keep the two identical): lowercase, collapse whitespace, strip one layer of
+// whole-answer wrapping punctuation and any trailing sentence punctuation.
+// Two answers with the same canonical text get the same score (handlePlay).
+const WRAPPING_PAIRS = [['"', '"'], ["'", "'"], ["(", ")"], ["[", "]"], ["{", "}"], ["“", "”"], ["‘", "’"]];
+
+function canonicalizeForJudge(text) {
+  let s = String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (s.length >= 2) {
+    for (const [open, close] of WRAPPING_PAIRS) {
+      if (s[0] === open && s[s.length - 1] === close) {
+        s = s.slice(1, -1).trim();
+        break;
+      }
+    }
+  }
+  return s.trim().replace(/[.!?,]+$/, "").trim();
+}
+
 async function answerHash({ challengeId, scoringVersion, normalizedAnswer }) {
   const encoder = new TextEncoder();
   const fields = [
@@ -634,6 +653,22 @@ async function handlePlay(request, env, ip) {
     return fail("duplicate_answer", "You've already submitted that answer.", 409, env);
   }
 
+  // Same answer, same score. The judge runs in each player's browser, and
+  // different GPUs and browsers give slightly different numbers for the same
+  // text ("a memory" scored 48.61 and 51.14 on 14 Oct). So the first score
+  // recorded for an answer on this challenge - compared as the text the judge
+  // sees, canonicalizeForJudge() - is the score for everyone who gives it
+  // afterwards, on the day or later from the archive.
+  const judged = canonicalizeForJudge(answer);
+  const { results: earlier } = await env.DB.prepare(
+    `SELECT original_answer, noul FROM submissions WHERE challenge_id = ? ORDER BY submitted_at ASC, id ASC`,
+  )
+    .bind(expectedChallengeId)
+    .all();
+  const first = (earlier ?? []).find((r) => canonicalizeForJudge(r.original_answer) === judged);
+  const finalNoul = first ? first.noul : noul;
+  const finalScore = finalNoul * 100;
+
   // Assign the attempt number here, from an actual row count - never from
   // anything the client sent. Retried a few times against the unique
   // (player_id, challenge_id, attempt_number) constraint to stay correct if
@@ -676,8 +711,8 @@ async function handlePlay(request, env, ip) {
           answer,
           normalized,
           expectedHash,
-          noul,
-          expectedScore,
+          finalNoul,
+          finalScore,
           model,
           new Date().toISOString(),
           isLate ? 1 : 0,
@@ -707,7 +742,7 @@ async function handlePlay(request, env, ip) {
 
   return json(
     {
-      result: { answer, score: expectedScore, attemptNumber, late: isLate },
+      result: { answer, score: finalScore, attemptNumber, late: isLate, matched: !!first },
       attempts: playerAttempts,
       leaderboard: board,
     },

@@ -15,7 +15,7 @@ import {
   validateName,
 } from "@shared/challenges.js";
 import { answerHash, normalizeAnswer } from "@shared/normalize.js";
-import { looksLikeOwnInterpretation, looksLikeRealText } from "@shared/gibberish.js";
+import { looksLikeRealText } from "@shared/gibberish.js";
 import { PHASE, UnsupportedDeviceError, judgeInfo, judgeRuntime, loadJudge, scoreAnswer } from "./judge.js";
 import { fetchAttempts, fetchLeaderboard, leaderboardEnabled, loadConfig, submit } from "./api.js";
 import {
@@ -819,9 +819,6 @@ el.archivePlay.addEventListener("submit", async (event) => {
   if (!looksLikeRealText(answer)) {
     return showArchiveError("Write an actual interpretation, not random characters.");
   }
-  if (!looksLikeOwnInterpretation(answer, archiveChallenge.prompt)) {
-    return showArchiveError("That just repeats the riddle back — give your own interpretation.");
-  }
   if (isDuplicateAnswer(archiveAttemptsList, answer)) {
     return showArchiveError("You've already submitted that answer — try a different one.");
   }
@@ -1055,9 +1052,6 @@ el.bonusPlay.addEventListener("submit", async (event) => {
   if (!looksLikeRealText(answer)) {
     return showBonusError("Write an actual guess, not random characters.");
   }
-  if (!looksLikeOwnInterpretation(answer, bonusChallenge.prompt)) {
-    return showBonusError("That just repeats the prompt back — give your own guess.");
-  }
   if (isDuplicateAnswer(bonusAttemptsList, answer)) {
     return showBonusError("You've already guessed that — try a different one.");
   }
@@ -1239,13 +1233,12 @@ el.play.addEventListener("submit", async (event) => {
     return showError(err.message);
   }
 
-  // Two non-AI gates, neither of which ever scores anything - they only
-  // decide whether the real judge is asked at all. See shared/gibberish.js.
+  // A non-AI gate that never scores anything - it only decides whether the
+  // real judge is asked at all. See shared/gibberish.js. Answers that reuse
+  // the riddle's words are no longer blocked (owner, 18 Oct): since v5 the
+  // judge itself marks rewordings down.
   if (!looksLikeRealText(answer)) {
     return showError("Write an actual interpretation, not random characters.");
-  }
-  if (!looksLikeOwnInterpretation(answer, challenge.prompt)) {
-    return showError("That just repeats the riddle back — give your own interpretation.");
   }
   if (isDuplicateAnswer(attempts, answer)) {
     return showError("You've already submitted that answer — try a different one.");
