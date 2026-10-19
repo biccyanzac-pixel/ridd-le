@@ -274,12 +274,12 @@ try {
     onPhase: ({ phase, progress, loaded, total }) => {
       if (phase === PHASE.DOWNLOADING) {
         const pct = Math.round((progress ?? 0) * 100);
-        el.preparingBar.style.width = `${pct}%`;
+        el.preparingBar.style.transform = `translateX(${pct - 100}%)`; // a transform: no relayout
         el.preparingBar.classList.remove("indeterminate");
         const note = bytes(loaded) && bytes(total) ? ` (${bytes(loaded)} / ${bytes(total)})` : "";
         el.preparingText.textContent = `Downloading judge… ${pct}%${note}`;
       } else if (phase === PHASE.INITIALIZING) {
-        el.preparingBar.style.width = "100%";
+        el.preparingBar.style.transform = "none";
         el.preparingBar.classList.add("indeterminate");
         el.preparingText.textContent = "Initializing judge…";
       }
@@ -292,6 +292,7 @@ try {
   el.answer.focus();
 } catch (err) {
   console.error("[sandbox] judge failed to load:", err);
+  el.preparing.querySelector(".spinner-ring").hidden = true;
   el.preparingBar.classList.remove("indeterminate");
   el.preparingText.textContent =
     err instanceof UnsupportedDeviceError

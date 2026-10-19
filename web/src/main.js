@@ -173,12 +173,23 @@ const el = {
     el.musicHint.hidden = false;
     requestAnimationFrame(() => el.musicHint.classList.add("visible"));
     clearTimeout(hintHideTimer);
-    hintHideTimer = setTimeout(() => {
-      el.musicHint.classList.remove("visible");
-      setTimeout(() => {
-        el.musicHint.hidden = true;
-      }, 300);
-    }, 6000);
+    hintHideTimer = setTimeout(fadeOutMusicHint, 6000);
+  }
+  // Hidden once its CSS fade has actually finished (transitionend), so the
+  // stylesheet's duration is the only one; the timeout only covers a
+  // transition that never runs (display changes, a background tab).
+  function fadeOutMusicHint() {
+    const hint = el.musicHint;
+    hint.classList.remove("visible");
+    let fallback = 0;
+    const finish = (event) => {
+      if (event && (event.target !== hint || event.propertyName !== "opacity")) return;
+      hint.removeEventListener("transitionend", finish);
+      clearTimeout(fallback);
+      if (!hint.classList.contains("visible")) hint.hidden = true;
+    };
+    hint.addEventListener("transitionend", finish);
+    fallback = setTimeout(finish, 600);
   }
   if (!hasSeenMusicHint()) {
     flashMusicHint();
@@ -235,6 +246,35 @@ let attempts = [];
 function showError(message) {
   el.error.textContent = message ?? "";
   el.error.hidden = !message;
+}
+
+// --- motion (docs/motion-system.md in the jacob.gg hub) ----------------------
+// The kit loads with `defer` and may fail, so every JGG.motion call has a plain
+// fallback with the same end state and no animation.
+
+function reducedMotion() {
+  try {
+    return matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
+/** Show `node`. With `animate`, and only if it was hidden, it plays the kit's
+ * entrance (`kind: "reveal"` for results); otherwise it simply appears. */
+function showEl(node, animate = false, kind) {
+  const m = window.JGG?.motion;
+  if (animate && node.hidden && m) m.enter(node, kind ? { kind } : undefined);
+  else node.hidden = false;
+}
+
+/** Put a score on screen. With `from`, it counts up (tap or key to skip, never
+ * awaited); without, the final value shows at once and any count-up still
+ * running on that element is finished first. */
+function setScore(node, value, from) {
+  const m = window.JGG?.motion;
+  if (m?.settle) m.settle(node, value, { from: from ?? value, format: formatScore });
+  else node.textContent = formatScore(value);
 }
 
 function pad(n) {
@@ -371,47 +411,71 @@ function updateBonusTeaser() {
   el.bonusTeaser.hidden = !leaderboardEnabled() || hasCompletedToday();
 }
 
-/** Render the attempts panel and the running/final daily average. */
-function renderAttempts() {
+// What the attempts panel last showed, so a newly landed attempt can animate
+// from there. Null until the first render.
+let shownAttempts = null;
+let shownDaily = 0;
+
+/** Render the attempts panel and the running/final daily average.
+ * `landed: true` only right after this player's new attempt was accepted: then
+ * (and only then) the newest row reveals, the score counts up from the old
+ * average, and finishing swaps the form for the done panel. Every other render
+ * (load, restore, a refetch) shows the final state at once. */
+function renderAttempts({ landed = false } = {}) {
   updateBonusTeaser();
   renderNameField();
+  const fresh = landed && shownAttempts !== null && attempts.length > shownAttempts;
+  const fromDaily = shownAttempts ? shownDaily : 0;
+  shownAttempts = attempts.length;
   if (attempts.length === 0) {
     el.attempts.hidden = true;
+    shownDaily = 0;
     return;
   }
 
   el.preparing.hidden = true;
-  el.attempts.hidden = false;
+  showEl(el.attempts, fresh);
 
   const daily = averageScore(attempts);
-  el.dailyScore.textContent = formatScore(daily);
+  shownDaily = daily;
+  setScore(el.dailyScore, daily, fresh ? fromDaily : undefined);
   el.dailyScore.className = `score ${scoreClass(daily)}`;
   el.dailyScoreCaption.textContent = hasCompletedToday()
     ? "Daily score — average of all 3 attempts"
     : `Daily score so far — average of ${attempts.length} of ${MAX_ATTEMPTS}`;
 
-  el.attemptList.replaceChildren();
-  for (const attempt of attempts) el.attemptList.append(attemptRow(attempt));
+  // The list is rebuilt, so only the newest row is marked to reveal.
+  const rows = attempts.map(attemptRow);
+  el.attemptList.replaceChildren(...rows);
+  if (fresh) {
+    const newest = rows[rows.length - 1];
+    newest.hidden = true;
+    showEl(newest, true, "reveal");
+  }
 
   const done = hasCompletedToday();
-  el.attemptsDone.hidden = !done;
   const rate = $("rate");
-  rate.hidden = !done;
   if (done) window.JGG?.rate({ game: "ridd-le", day: challenge.dayKey, mount: rate });
-  el.play.hidden = done;
+  if (done && fresh && !el.play.hidden && window.JGG?.motion) {
+    // Finishing: the form gives way to the done panel (one 220 ms swap).
+    window.JGG.motion.swap(el.play, el.attemptsDone);
+  } else {
+    el.play.hidden = done;
+    el.attemptsDone.hidden = !done;
+  }
+  if (done) showEl(rate, fresh);
+  else rate.hidden = true;
   if (!done) el.attemptNumber.textContent = String(attempts.length + 1);
-  updatePlayBonusButton();
+  updatePlayBonusButton(fresh);
 }
 
 /** The shortcut down to the bonus round, which only makes sense while there
  * is still a guess left to make: shown once today's riddle is finished, gone
  * again once all 3 bonus guesses are used. */
-function updatePlayBonusButton() {
-  el.playBonusButton.hidden = !(
-    hasCompletedToday() &&
-    leaderboardEnabled() &&
-    !hasCompletedBonus()
-  );
+function updatePlayBonusButton(animate = false) {
+  const show = hasCompletedToday() && leaderboardEnabled() && !hasCompletedBonus();
+  if (show) showEl(el.playBonusButton, animate);
+  else el.playBonusButton.hidden = true;
 }
 
 // --- rendering: today's leaderboard ----------------------------------------
@@ -750,7 +814,7 @@ function renderArchiveList() {
 el.archiveBrowse.addEventListener("click", () => {
   if (el.archiveList.hidden) {
     renderArchiveList();
-    el.archiveList.hidden = false;
+    showEl(el.archiveList, true); // one entrance for the whole list, no per-item stagger
   } else {
     el.archiveList.hidden = true;
   }
@@ -759,7 +823,7 @@ el.archiveBrowse.addEventListener("click", () => {
 async function loadArchiveDay(dayKey) {
   archiveChallenge = challengeForDay(dayKey);
   archiveAttemptsList = [];
-  el.archiveChallenge.hidden = false;
+  showEl(el.archiveChallenge, true);
   el.archiveDaynum.textContent = `Daily #${archiveChallenge.dayNumber} — ${formatDayKey(dayKey)}`;
   el.archivePrompt.textContent = archiveChallenge.prompt;
   el.archiveAnswer.maxLength = MAX_ANSWER;
@@ -996,6 +1060,7 @@ async function refreshBonusBoard() {
 // `bonusInitialized` guards the one-time fetch so re-renders (e.g. another
 // main-round attempt that doesn't change completion) don't re-fetch.
 let bonusInitialized = false;
+let booted = false; // set once the page's first render is done
 
 async function initBonusIfUnlocked() {
   if (!leaderboardEnabled()) {
@@ -1013,7 +1078,9 @@ async function initBonusIfUnlocked() {
 
   const unlocked = hasCompletedToday();
   el.bonusLocked.hidden = unlocked;
-  el.bonusUnlocked.hidden = !unlocked;
+  // Enters when it unlocks during play; already unlocked on load, it is just there.
+  if (unlocked) showEl(el.bonusUnlocked, booted);
+  else el.bonusUnlocked.hidden = true;
   if (!unlocked || bonusInitialized) return;
   bonusInitialized = true;
   el.bonusPrompt.textContent = bonusChallenge.prompt;
@@ -1128,6 +1195,12 @@ function formatBytes(bytes) {
   return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${Math.round(mb)} MB`;
 }
 
+/** The download meter: a full-width fill slid in from the left (a transform,
+ * so it never relayouts). */
+function setMeter(percent) {
+  el.preparingBar.style.transform = `translateX(${percent - 100}%)`;
+}
+
 async function prepareJudge() {
   const info = await judgeInfo();
 
@@ -1156,7 +1229,7 @@ async function prepareJudge() {
     onPhase: ({ phase, progress, loaded, total }) => {
       if (phase === PHASE.DOWNLOADING) {
         const percent = Math.round(progress * 100);
-        el.preparingBar.style.width = `${percent}%`;
+        setMeter(percent);
         el.preparingBar.classList.remove("indeterminate");
         const byteNote =
           typeof loaded === "number" && typeof total === "number" && total > 0
@@ -1164,7 +1237,7 @@ async function prepareJudge() {
             : "";
         el.preparingText.textContent = `Downloading judge… ${percent}%${byteNote}`;
       } else if (phase === PHASE.INITIALIZING) {
-        el.preparingBar.style.width = "100%";
+        setMeter(100);
         el.preparingBar.classList.add("indeterminate");
         el.preparingText.textContent = "Initializing judge…";
         el.preparingNote.textContent = "Setting up the model on this device. Almost ready.";
@@ -1175,12 +1248,20 @@ async function prepareJudge() {
     },
   });
 
-  el.preparingBar.style.width = "100%";
-  el.preparing.hidden = true;
+  setMeter(100);
   if (attempts.length < MAX_ATTEMPTS) {
-    el.play.hidden = false;
+    // Loading -> play: one overlapping 220 ms swap; the form takes input from
+    // its first frame.
+    const m = window.JGG?.motion;
+    if (m?.swap) m.swap(el.preparing, el.play);
+    else {
+      el.preparing.hidden = true;
+      el.play.hidden = false;
+    }
     el.name.value = savedName();
     updateCounter();
+  } else {
+    el.preparing.hidden = true;
   }
 }
 
@@ -1210,7 +1291,9 @@ el.answer.addEventListener("keydown", (event) => {
 });
 
 el.playBonusButton.addEventListener("click", () => {
-  el.bonus.scrollIntoView({ behavior: "smooth", block: "start" });
+  const m = window.JGG?.motion;
+  if (m?.scroll) m.scroll(el.bonus, { block: "start" });
+  else el.bonus.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
 });
 
 let busy = false;
@@ -1301,7 +1384,7 @@ el.play.addEventListener("submit", async (event) => {
         } else {
           attempts = addLocalAttempt(challenge.id, localAttempt);
         }
-        renderAttempts();
+        renderAttempts({ landed: true });
         if (response?.leaderboard) renderBoard(response.leaderboard);
         else await refreshBoard();
         clearAnswerInput();
@@ -1325,7 +1408,7 @@ el.play.addEventListener("submit", async (event) => {
         } else {
           // The score is real and shown locally; only the shared board failed.
           attempts = addLocalAttempt(challenge.id, localAttempt);
-          renderAttempts();
+          renderAttempts({ landed: true });
           addToLocalBoard(challenge.id, {
             name,
             answer: bestAnswerOf(attempts),
@@ -1341,7 +1424,7 @@ el.play.addEventListener("submit", async (event) => {
       }
     } else {
       attempts = addLocalAttempt(challenge.id, localAttempt);
-      renderAttempts();
+      renderAttempts({ landed: true });
       addToLocalBoard(challenge.id, {
         name,
         answer: bestAnswerOf(attempts),
@@ -1397,6 +1480,7 @@ await refreshBoard();
 await renderYesterday(); // a different, already-closed riddle - safe to show any time
 startPolling();
 await initBonusIfUnlocked(); // no-op unless today's riddle is already done
+booted = true;
 
 // Archive needs the shared backend to have anywhere durable to store late
 // attempts and a separate late leaderboard to show them on - with no
@@ -1449,6 +1533,9 @@ if (hasCompletedToday()) {
     el.preparingNote.textContent = debugRequested
       ? `${friendlyNote}\n\nDEBUG: ${describeErrorChain(err)}`
       : friendlyNote;
-    el.preparingBar.style.width = "0%";
+    // A failure isn't loading any more: stop and hide the spinner and the sweep.
+    el.preparing.querySelector(".spinner-ring").hidden = true;
+    el.preparingBar.classList.remove("indeterminate");
+    setMeter(0);
   }
 }
