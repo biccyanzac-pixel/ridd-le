@@ -171,7 +171,8 @@ const el = {
   function flashMusicHint() {
     if (hasSeenMusicHint()) return;
     el.musicHint.hidden = false;
-    requestAnimationFrame(() => el.musicHint.classList.add("visible"));
+    void el.musicHint.offsetWidth; // commit the hidden state first, or the fade-in is skipped
+    el.musicHint.classList.add("visible");
     clearTimeout(hintHideTimer);
     hintHideTimer = setTimeout(fadeOutMusicHint, 6000);
   }
@@ -461,7 +462,7 @@ function renderAttempts({ landed = false } = {}) {
   // The list is rebuilt, so only the newest row is marked to reveal.
   const rows = attempts.map(attemptRow);
   el.attemptList.replaceChildren(...rows);
-  if (fresh) {
+  if (fresh && attempts.length > 1) { // the first attempt arrives with the panel's own entrance
     const newest = rows[rows.length - 1];
     newest.hidden = true;
     showEl(newest, true, "reveal");
@@ -471,8 +472,15 @@ function renderAttempts({ landed = false } = {}) {
   const rate = $("rate");
   if (done) window.JGG?.rate({ game: "ridd-le", day: challenge.dayKey, mount: rate });
   if (done && fresh && !el.play.hidden && window.JGG?.motion) {
-    // Finishing: the form gives way to the done panel (one 220 ms swap).
+    // Finishing: the form gives way to the done panel (one 220 ms swap), and the attempts panel glides up into
+    // the form's place (FLIP, 220 ms) instead of jumping under the counting score.
+    const before = el.attempts.getBoundingClientRect().top;
     window.JGG.motion.swap(el.play, el.attemptsDone);
+    const dy = before - el.attempts.getBoundingClientRect().top;
+    if (dy && !window.JGG.motion.reduced()) {
+      el.attempts.animate?.([{ transform: `translateY(${dy}px)` }, { transform: "none" }],
+        { duration: 220, easing: "cubic-bezier(0.23, 1, 0.32, 1)", composite: "add" });
+    }
   } else {
     el.play.hidden = done;
     el.attemptsDone.hidden = !done;

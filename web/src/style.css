@@ -722,7 +722,7 @@ textarea:focus-visible,
 
 .meter-fill.indeterminate {
   width: 40% !important;
-  animation: meter-sweep 1.1s var(--jgg-ease-in-out, cubic-bezier(0.77, 0, 0.175, 1)) infinite;
+  animation: meter-sweep 1.1s linear infinite; /* a looping progress sweep moves at constant speed */
 }
 
 @keyframes meter-sweep {
