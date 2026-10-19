@@ -437,6 +437,7 @@ let shownDaily = 0;
  * average, and finishing swaps the form for the done panel. Every other render
  * (load, restore, a refetch) shows the final state at once. */
 function renderAttempts({ landed = false } = {}) {
+  const attemptsTop = el.attempts.getBoundingClientRect().top; // before anything above it changes (FLIP below)
   updateBonusTeaser();
   renderNameField();
   const fresh = landed && shownAttempts !== null && attempts.length > shownAttempts;
@@ -474,9 +475,8 @@ function renderAttempts({ landed = false } = {}) {
   if (done && fresh && !el.play.hidden && window.JGG?.motion) {
     // Finishing: the form gives way to the done panel (one 220 ms swap), and the attempts panel glides up into
     // the form's place (FLIP, 220 ms) instead of jumping under the counting score.
-    const before = el.attempts.getBoundingClientRect().top;
     window.JGG.motion.swap(el.play, el.attemptsDone);
-    const dy = before - el.attempts.getBoundingClientRect().top;
+    const dy = attemptsTop - el.attempts.getBoundingClientRect().top;
     if (dy && !window.JGG.motion.reduced()) {
       el.attempts.animate?.([{ transform: `translateY(${dy}px)` }, { transform: "none" }],
         { duration: 220, easing: "cubic-bezier(0.23, 1, 0.32, 1)", composite: "add" });
