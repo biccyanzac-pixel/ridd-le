@@ -308,7 +308,7 @@ textarea:focus-visible,
 
 .row {
   display: grid;
-  grid-template-columns: 1.75rem minmax(0, 1fr) auto;
+  grid-template-columns: minmax(1.75rem, max-content) minmax(0, 1fr) auto; /* a 4-digit rank widens its column */
   align-items: center;
   gap: 0.75rem;
   padding: 0.6rem 0.65rem;
@@ -341,10 +341,23 @@ textarea:focus-visible,
 }
 
 .row-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
+  min-width: 0;
   font-weight: 600;
+}
+
+.row-name-text {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.row-you {
+  flex: none;
+  white-space: nowrap;
 }
 
 .row-answer {
@@ -520,6 +533,7 @@ textarea:focus-visible,
   margin: 0;
   font-size: 0.82rem;
   color: var(--muted);
+  overflow-wrap: anywhere; /* a 20-letter name with no spaces still fits at 320px */
 }
 
 .yesterday-prompt {
@@ -609,7 +623,7 @@ textarea:focus-visible,
   padding: 0.7rem 0.9rem;
   font: inherit;
   font-weight: 600;
-  color: var(--accent-contrast, #111);
+  color: #fff; /* same as .submit; --accent-contrast isn't a kit token */
   background: var(--accent);
   border: none;
   border-radius: 10px;
@@ -691,6 +705,7 @@ textarea:focus-visible,
 .yesterday-best-summary {
   margin: 0.5rem 0 0;
   font-size: 0.95rem;
+  overflow-wrap: anywhere;
 }
 
 .yesterday-best-summary #yesterday-best-name {
@@ -744,7 +759,7 @@ textarea:focus-visible,
 
 .archive-browse {
   background: var(--accent);
-  color: var(--accent-contrast, #111);
+  color: #fff;
   border: none;
   border-radius: 0.5rem;
   padding: 0.5rem 1rem;
@@ -779,7 +794,7 @@ textarea:focus-visible,
   flex-direction: column;
   gap: 0.15rem;
   text-align: left;
-  background: var(--panel);
+  background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
@@ -798,7 +813,7 @@ textarea:focus-visible,
 
 /* A full-width row: press feedback is a background change, not a scale. */
 .archive-list-item:active {
-  background: var(--surface-2);
+  background: var(--accent-soft);
 }
 
 .archive-list-day {
@@ -810,6 +825,7 @@ textarea:focus-visible,
 .archive-list-prompt {
   font-size: 0.9rem;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .archive-list-empty {
@@ -852,9 +868,9 @@ textarea:focus-visible,
   font-weight: 600;
   text-transform: none;
   letter-spacing: normal;
-  color: var(--warning, #c77b2b);
-  background: color-mix(in srgb, var(--warning, #c77b2b) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warning, #c77b2b) 40%, transparent);
+  color: var(--warn, #c77b2b);
+  background: color-mix(in srgb, var(--warn, #c77b2b) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn, #c77b2b) 40%, transparent);
   border-radius: 999px;
   padding: 0.15rem 0.6rem;
 }

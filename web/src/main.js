@@ -277,6 +277,20 @@ function setScore(node, value, from) {
   else node.textContent = formatScore(value);
 }
 
+/** A user-chosen name as a node: isolated direction (Arabic/Hebrew names don't
+ * reorder the text around them) and the full name on hover when it truncates. */
+function nameNode(name, tag = "bdi") {
+  const n = document.createElement(tag);
+  n.textContent = name;
+  n.title = name;
+  return n;
+}
+
+/** Leaderboard scores: a missing one reads "—", not "NaN". */
+function boardScore(score) {
+  return Number.isFinite(score) ? formatScore(score) : "—";
+}
+
 function pad(n) {
   return String(n).padStart(2, "0");
 }
@@ -389,7 +403,7 @@ function renderNameField() {
   el.nameField.hidden = true;
   el.name.value = chosen;
   el.playingAs.hidden = false;
-  el.playingAs.replaceChildren(`Playing as ${chosen}`);
+  el.playingAs.replaceChildren("Playing as ", nameNode(chosen));
   if (!settled) {
     const change = document.createElement("button");
     change.type = "button";
@@ -499,9 +513,19 @@ function todayRowNode(entry, rank) {
 
   const main = document.createElement("div");
   main.className = "row-main";
+  // The name truncates on its own; "(you)" sits outside it so it is never cut.
   const name = document.createElement("div");
   name.className = "row-name";
-  name.textContent = entry.you ? `${entry.name} (you)` : entry.name;
+  const nameText = nameNode(entry.name || "Someone", "span");
+  nameText.className = "row-name-text";
+  nameText.dir = "auto";
+  name.append(nameText);
+  if (entry.you) {
+    const you = document.createElement("span");
+    you.className = "row-you";
+    you.textContent = "(you)";
+    name.append(you);
+  }
   main.append(name);
 
   if (Array.isArray(entry.attempts)) {
@@ -515,10 +539,12 @@ function todayRowNode(entry, rank) {
       label.textContent = `${attempt.attemptNumber}.`;
       const answer = document.createElement("span");
       answer.className = "row-attempt-answer";
+      answer.dir = "auto";
       answer.textContent = attempt.answer;
+      answer.title = attempt.answer ?? "";
       const score = document.createElement("span");
       score.className = "row-attempt-score";
-      score.textContent = formatScore(attempt.score);
+      score.textContent = boardScore(attempt.score);
       item.append(label, answer, score);
       list.append(item);
     }
@@ -527,7 +553,7 @@ function todayRowNode(entry, rank) {
 
   const score = document.createElement("span");
   score.className = "row-score";
-  score.textContent = formatScore(entry.score);
+  score.textContent = boardScore(entry.score);
 
   li.append(rankEl, main, score);
   return li;
@@ -538,7 +564,7 @@ function renderBoard(board, note) {
   el.rows.replaceChildren();
   const rows = board?.top ?? [];
   const players = board?.players ?? rows.length;
-  el.players.textContent = players === 1 ? "1 player" : `${players} players`;
+  el.players.textContent = players === 1 ? "1 player" : `${players.toLocaleString("en")} players`;
   el.boardEmpty.hidden = rows.length > 0;
   el.boardLocked.hidden = hasCompletedToday() || !leaderboardEnabled();
   rows.forEach((entry, index) => el.rows.append(todayRowNode(entry, index + 1)));
@@ -598,9 +624,10 @@ function buildAnswerRow(score, answerText) {
   li.className = "yesterday-row";
   const scoreEl = document.createElement("span");
   scoreEl.className = "yesterday-score";
-  scoreEl.textContent = formatScore(score);
+  scoreEl.textContent = boardScore(score);
   const answerEl = document.createElement("span");
   answerEl.className = "yesterday-answer";
+  answerEl.dir = "auto";
   answerEl.textContent = answerText;
   li.append(scoreEl, answerEl);
   return li;
@@ -627,7 +654,8 @@ function renderBestAverage(rows, { container, nameEl, avgEl, rowsEl }) {
   }
   container.hidden = false;
   nameEl.textContent = best.name || "Someone";
-  avgEl.textContent = formatScore(best.score);
+  nameEl.title = nameEl.textContent;
+  avgEl.textContent = boardScore(best.score);
   for (const attempt of best.attempts) {
     rowsEl.append(buildAnswerRow(attempt.score, attempt.answer));
   }
@@ -1004,7 +1032,7 @@ function renderBonusNameField() {
   if (chosen) {
     el.bonusNameField.hidden = true;
     el.bonusPlayingAs.hidden = false;
-    el.bonusPlayingAs.textContent = `Playing as ${chosen}`;
+    el.bonusPlayingAs.replaceChildren("Playing as ", nameNode(chosen));
   } else {
     el.bonusNameField.hidden = false;
     el.bonusPlayingAs.hidden = true;
