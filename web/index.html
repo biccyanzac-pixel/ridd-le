@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7fb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0c10" />
     <title>Daily — ridd-le</title>
     <meta
       name="description"
@@ -79,6 +81,8 @@
               type="text"
               maxlength="20"
               autocomplete="nickname"
+              autocapitalize="none"
+              autocorrect="off"
               placeholder="e.g. jacob"
               required
             />
@@ -164,6 +168,8 @@
                 type="text"
                 maxlength="20"
                 autocomplete="nickname"
+                autocapitalize="none"
+                autocorrect="off"
                 placeholder="e.g. jacob"
               />
             </label>
@@ -220,7 +226,7 @@
         <div class="yesterday-best" id="yesterday-best" hidden>
           <h3 class="eyebrow">Yesterday's best average</h3>
           <p class="yesterday-best-summary">
-            <span id="yesterday-best-name"></span> — <span id="yesterday-best-avg"></span>
+            <span id="yesterday-best-name" dir="auto"></span> — <span id="yesterday-best-avg"></span>
           </p>
           <ol class="yesterday-rows" id="yesterday-best-rows"></ol>
         </div>
@@ -236,7 +242,7 @@
           <div class="yesterday-bonus-best" id="yesterday-bonus-best" hidden>
             <h4 class="eyebrow">Bonus round's best average</h4>
             <p class="yesterday-best-summary">
-              <span id="yesterday-bonus-best-name"></span> —
+              <span id="yesterday-bonus-best-name" dir="auto"></span> —
               <span id="yesterday-bonus-best-avg"></span>
             </p>
             <ol class="yesterday-rows" id="yesterday-bonus-best-rows"></ol>
@@ -270,6 +276,8 @@
                 type="text"
                 maxlength="20"
                 autocomplete="nickname"
+                autocapitalize="none"
+                autocorrect="off"
                 placeholder="e.g. jacob"
                 required
               />
