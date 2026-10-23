@@ -37,7 +37,7 @@ worst error: it rewards nonsense). False-wrong = a valid answer called wrong.
 
 | Model | Cases | Accuracy | False-correct | False-wrong on valid | Median latency | Tokens in/out | Daily capacity (free) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Groq · qwen/qwen3.8-27b | 549 | 78.1% | 6.6% (27) | 1.4% (2) | 264 ms | 338/81 | ≈475 |
+| Groq · qwen/qwen3.8-27b | **600** | 77.8% | 6.7% (30) | 1.3% (2) | 266 ms | 338/81 | ≈475 |
 | Groq · openai/gpt-oss-20b | 462 | 77.9% | 7.8% (27) | 2.6% (3) | 444 ms | 415/141 | ≈350 |
 | Gemini · gemini-3.5-flash-lite | 530 | 72.8% | 7.5% (30) | 0.8% (1) | 871 ms | 320/94 | 500 |
 | Workers AI · llama-3.1-8b-instruct-fp8 | 600 | 57.2% | **31.3% (141)** | 1.3% (2) | 5,406 ms | 328/102 | ≈1,400 |
@@ -49,7 +49,7 @@ Per category, accuracy and how the verdicts fell (correct/close/wrong):
 
 | Model | intended | alt | near | vague | wrong | nonsense | adversarial |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Groq · Qwen 3.8 27B | 100% | 84% (92/16/2) | 80% (16/85/5) | 62% (2/19/34) | 48% (8/49/53) | 98% | 98% |
+| Groq · Qwen 3.8 27B (all 600) | 100% | 83% (99/18/2) | 80% (18/94/6) | 60% (3/21/36) | 49% (8/54/60) | 98% | 98% |
 | Groq · gpt-oss-20b | 96% | 76% (69/19/3) | 75% (15/68/8) | 65% (1/15/30) | 62% (8/26/56) | 100% | 92% |
 | Gemini 3.5 Flash-Lite | 100% | 87% (90/13/1) | 76% (16/77/9) | 32% (2/34/17) | 50% (11/43/53) | 87% | 90% |
 | Workers AI gpt-oss-20b | 95% | 65% (54/27/2) | 83% (7/69/5) | 64% (2/13/27) | 63% (5/25/54) | 95% | 87% |
