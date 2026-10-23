@@ -1,0 +1,283 @@
+{
+ "summary": {
+  "provider": "gemini-3.5-flash-lite",
+  "model": "gemini/gemini-3.5-flash-lite",
+  "promptVersion": 1,
+  "at": "2026-10-22T23:17:41.323Z",
+  "cases": 6,
+  "repeat": 1,
+  "accuracy": 100,
+  "byCategory": {
+   "intended": {
+    "n": 1,
+    "accuracy": 100,
+    "verdicts": {
+     "correct": 1,
+     "close": 0,
+     "wrong": 0,
+     "other": 0
+    }
+   },
+   "alt": {
+    "n": 4,
+    "accuracy": 100,
+    "verdicts": {
+     "correct": 4,
+     "close": 0,
+     "wrong": 0,
+     "other": 0
+    }
+   },
+   "near": {
+    "n": 1,
+    "accuracy": 100,
+    "verdicts": {
+     "correct": 0,
+     "close": 1,
+     "wrong": 0,
+     "other": 0
+    }
+   }
+  },
+  "falseCorrectRate": 0,
+  "falseCorrect": 0,
+  "falseWrongRate": 0,
+  "falseWrong": 0,
+  "errors": 0,
+  "unparseable": 0,
+  "consistency": null,
+  "latencyMs": {
+   "median": 837,
+   "p90": 1004
+  },
+  "tokensPerCall": {
+   "input": 318,
+   "output": 96
+  },
+  "modelCalls": 6
+ },
+ "rows": [
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "a competition",
+   "label": "correct",
+   "cat": "intended",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "People commonly enter competitions."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Entering a competition requires no physical building."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "A competition is a specific noun phrase."
+      }
+     ],
+     "latencyMs": 1004,
+     "usage": {
+      "input": 318,
+      "output": 119
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "a raffle",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "People commonly enter a raffle."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Entering a raffle requires no physical entrance."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "A raffle is a specific, well-defined noun."
+      }
+     ],
+     "latencyMs": 837,
+     "usage": {
+      "input": 318,
+      "output": 123
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "a password",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "Yes, people enter passwords daily."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Yes, typing a password requires no physical movement into a space."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "Yes, a password is a specific, well-defined thing."
+      }
+     ],
+     "latencyMs": 741,
+     "usage": {
+      "input": 318,
+      "output": 74
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "an agreement",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "Yes, people commonly enter agreements."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Yes, entering an agreement requires no physical location."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "Yes, an agreement is a specific, well-defined entity."
+      }
+     ],
+     "latencyMs": 716,
+     "usage": {
+      "input": 318,
+      "output": 71
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "data into a spreadsheet",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "You can enter data."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Typing data does not require physically going inside."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "It is a specific, well-defined action and object."
+      }
+     ],
+     "latencyMs": 848,
+     "usage": {
+      "input": 320,
+      "output": 125
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "a house",
+   "label": "close",
+   "cat": "near",
+   "reps": [
+    {
+     "verdict": "close",
+     "hint": "but do you enter it without going in anywhere?",
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "Yes, people enter houses."
+      },
+      {
+       "id": "no-going-in",
+       "pass": false,
+       "reason": "Entering a house requires physically going inside."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "Yes, a house is a specific thing."
+      }
+     ],
+     "latencyMs": 802,
+     "usage": {
+      "input": 318,
+      "output": 64
+     },
+     "cached": false
+    }
+   ]
+  }
+ ]
+}

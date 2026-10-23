@@ -1,0 +1,236 @@
+{
+ "summary": {
+  "provider": "groq-gpt-oss-20b",
+  "model": "groq/openai/gpt-oss-20b",
+  "promptVersion": 1,
+  "at": "2026-10-22T23:06:07.375Z",
+  "cases": 5,
+  "repeat": 1,
+  "accuracy": 100,
+  "byCategory": {
+   "intended": {
+    "n": 1,
+    "accuracy": 100,
+    "verdicts": {
+     "correct": 1,
+     "close": 0,
+     "wrong": 0,
+     "other": 0
+    }
+   },
+   "alt": {
+    "n": 4,
+    "accuracy": 100,
+    "verdicts": {
+     "correct": 4,
+     "close": 0,
+     "wrong": 0,
+     "other": 0
+    }
+   }
+  },
+  "falseCorrectRate": null,
+  "falseCorrect": 0,
+  "falseWrongRate": 0,
+  "falseWrong": 0,
+  "errors": 0,
+  "unparseable": 0,
+  "consistency": null,
+  "latencyMs": {
+   "median": 525,
+   "p90": 589
+  },
+  "tokensPerCall": {
+   "input": 410,
+   "output": 189
+  },
+  "modelCalls": 5
+ },
+ "rows": [
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "a competition",
+   "label": "correct",
+   "cat": "intended",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "You can say someone entered a competition."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Entering a competition is done by signing up, not physically entering."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "‘Competition’ is a specific, nameable event type."
+      }
+     ],
+     "latencyMs": 589,
+     "usage": {
+      "input": 410,
+      "output": 227
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "a raffle",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "You can say someone entered a raffle."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Entering a raffle requires no physical entry into a place."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "Raffle is a specific, nameable event."
+      }
+     ],
+     "latencyMs": 525,
+     "usage": {
+      "input": 410,
+      "output": 164
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "a password",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "You can say someone entered a password."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Entering a password requires no physical entry."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "Password is a specific, nameable item."
+      }
+     ],
+     "latencyMs": 288,
+     "usage": {
+      "input": 410,
+      "output": 155
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "an agreement",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "You can say someone entered into an agreement."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Entering an agreement requires no physical entry."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "Agreement is a specific, nameable thing."
+      }
+     ],
+     "latencyMs": 534,
+     "usage": {
+      "input": 410,
+      "output": 151
+     },
+     "cached": false
+    }
+   ]
+  },
+  {
+   "slug": "enter-without-going-in",
+   "prompt": "What can you enter without going in?",
+   "example": "a competition",
+   "answer": "data into a spreadsheet",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "enter",
+       "pass": true,
+       "reason": "You can say 'enter data into a spreadsheet'."
+      },
+      {
+       "id": "no-going-in",
+       "pass": true,
+       "reason": "Inputting data is done electronically, no physical entry required."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "Specifies a concrete action, not a vague category or meta-answer."
+      }
+     ],
+     "latencyMs": 374,
+     "usage": {
+      "input": 412,
+      "output": 246
+     },
+     "cached": false
+    }
+   ]
+  }
+ ]
+}

@@ -9,7 +9,28 @@ binding = "DB"
 database_name = "jacob-gg-leaderboard"
 database_id = "f43847da-3fcb-4f58-a78c-438c4ff17c01"
 
+# The judge's primary provider (scoring v6, src/judge.js): Workers AI. Free
+# plan: 10,000 neurons a day; the 8B Llama costs about 7 neurons a call, so
+# JUDGE_PRIMARY_DAILY below leaves room for everything else on the account.
+[ai]
+binding = "AI"
+
+# Every 10 minutes: score answers queued while judging was paused, and
+# pre-judge the likely answers for today's and tomorrow's riddles.
+[triggers]
+crons = ["*/10 * * * *"]
+
+[vars]
 # The browser's origin(s) allowed to call this API. Restricts the shared
 # leaderboard to this game, not the whole internet.
-[vars]
 ALLOWED_ORIGIN = "https://biccyanzac-pixel.github.io"
+# Judge provider slots. Secrets live outside this file:
+#   npx wrangler secret put GROQ_API_KEY
+#   npx wrangler secret put GEMINI_API_KEY        (only if a slot uses gemini)
+#   npx wrangler secret put JUDGE_ADMIN_TOKEN     (the owner's log/override token)
+JUDGE_PRIMARY = "cloudflare"
+JUDGE_PRIMARY_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8"
+JUDGE_PRIMARY_DAILY = "1200"
+JUDGE_BACKUP = "groq"
+JUDGE_BACKUP_MODEL = "openai/gpt-oss-20b"
+JUDGE_BACKUP_DAILY = "900"

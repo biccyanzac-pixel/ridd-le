@@ -9,6 +9,7 @@ import {
   formatScore,
   msUntilNextDay,
   previousDayKey,
+  serverJudged,
   statementsForVersion,
   todayKey,
   validateAnswer,
@@ -17,7 +18,7 @@ import {
 import { answerHash, normalizeAnswer } from "@shared/normalize.js";
 import { looksLikeRealText } from "@shared/gibberish.js";
 import { PHASE, UnsupportedDeviceError, judgeInfo, judgeRuntime, loadJudge, scoreAnswer } from "./judge.js";
-import { fetchAttempts, fetchLeaderboard, leaderboardEnabled, loadConfig, submit } from "./api.js";
+import { fetchAttempts, fetchLeaderboard, flagVerdict, leaderboardEnabled, loadConfig, submit } from "./api.js";
 import {
   addLocalAttempt,
   addToLocalBoard,
@@ -225,7 +226,16 @@ const challenge = challengeForDay(todayKey());
 // build, which is why production can never take this path.
 {
   const forced = Number(import.meta.env?.VITE_SCORING_VERSION);
-  if (forced && forced !== challenge.scoringVersion) {
+  if (forced >= 6 && forced !== challenge.scoringVersion) {
+    // v6 is judged by the worker, so there are no questions to swap in; the
+    // whole challenge moves to v6 instead, to line up with a local worker
+    // started with `--var SCORING_V6_FROM:<day>` (see worker/test/judge.e2e.mjs).
+    challenge.scoringVersion = forced;
+    challenge.id = `${challenge.slug}@v${forced}:${challenge.dayKey}`;
+    challenge.noulStatement = null;
+    challenge.penaltyStatement = null;
+    console.warn(`[dev] playing today as scoring v${forced} against a local worker with the same override.`);
+  } else if (forced && forced !== challenge.scoringVersion) {
     const s = statementsForVersion(forced, challenge.prompt);
     challenge.noulStatement = s.noulStatement;
     challenge.penaltyStatement = s.penaltyStatement;
@@ -241,6 +251,32 @@ const challenge = challengeForDay(todayKey());
 // is configured (reconciled from the server on load and after every submit),
 // otherwise the local-only record.
 let attempts = [];
+
+// From scoring v6 the worker judges every answer (see shared/clues.js and
+// worker/src/judge.js): the browser loads no model, and an attempt comes back
+// as correct / close / wrong with a hint, or as pending while judging is
+// paused. Everything below branches on this once, never on the date.
+const SERVER_JUDGED = serverJudged(challenge.scoringVersion);
+
+const VERDICT_LABEL = { correct: "Correct", close: "Close", wrong: "Not it", pending: "Judging paused" };
+
+/** The badge text for an attempt: its verdict from v6 on, its score before. */
+function verdictText(attempt) {
+  if (attempt?.verdict) return VERDICT_LABEL[attempt.verdict] ?? attempt.verdict;
+  return formatScore(attempt.score);
+}
+
+function verdictClass(attempt) {
+  if (attempt?.verdict === "correct") return "good";
+  if (attempt?.verdict === "wrong") return "bad";
+  if (attempt?.verdict === "pending") return "pending";
+  if (attempt?.verdict === "close") return "";
+  return scoreClass(attempt.score);
+}
+
+function anyPending(list) {
+  return (list ?? []).some((a) => a?.pending || a?.verdict === "pending");
+}
 
 // --- small helpers ---------------------------------------------------------
 
@@ -376,8 +412,8 @@ function attemptRow(attempt) {
   label.className = "attempt-label";
   label.textContent = `Attempt ${attempt.attemptNumber}`;
   const score = document.createElement("span");
-  score.className = `attempt-score ${scoreClass(attempt.score)}`;
-  score.textContent = formatScore(attempt.score);
+  score.className = `attempt-score ${verdictClass(attempt)}`;
+  score.textContent = verdictText(attempt);
   head.append(label, score);
 
   const answer = document.createElement("blockquote");
@@ -385,6 +421,35 @@ function attemptRow(attempt) {
   answer.textContent = attempt.answer;
 
   li.append(head, answer);
+
+  if (attempt.verdict === "pending") {
+    const note = document.createElement("p");
+    note.className = "attempt-hint";
+    note.textContent = "Saved. The judge is taking a break; your result will appear on your next visit.";
+    li.append(note);
+  } else if (attempt.hint && attempt.verdict !== "correct") {
+    const hint = document.createElement("p");
+    hint.className = "attempt-hint";
+    hint.textContent = attempt.hint;
+    li.append(hint);
+  }
+
+  if (attempt.verdict && attempt.verdict !== "pending" && attempt.cacheKey && leaderboardEnabled()) {
+    const flag = document.createElement("button");
+    flag.type = "button";
+    flag.className = "attempt-flag";
+    flag.textContent = "Wrong verdict?";
+    flag.addEventListener("click", async () => {
+      flag.disabled = true;
+      try {
+        await flagVerdict(attempt.cacheKey);
+        flag.textContent = "Flagged, thanks";
+      } catch {
+        flag.textContent = "Couldn't flag";
+      }
+    });
+    li.append(flag);
+  }
   return li;
 }
 
@@ -423,7 +488,7 @@ function renderNameField() {
 /** The inline nudge next to the riddle, alongside (not instead of) the
  * always-visible locked bonus panel further down the page. */
 function updateBonusTeaser() {
-  el.bonusTeaser.hidden = !leaderboardEnabled() || hasCompletedToday();
+  el.bonusTeaser.hidden = SERVER_JUDGED || !leaderboardEnabled() || hasCompletedToday();
 }
 
 // What the attempts panel last showed, so a newly landed attempt can animate
@@ -452,13 +517,17 @@ function renderAttempts({ landed = false } = {}) {
   el.preparing.hidden = true;
   showEl(el.attempts, fresh);
 
-  const daily = averageScore(attempts);
+  // Pending attempts (judging paused) join the average once scored, as on the server.
+  const daily = averageScore(attempts.filter((a) => !a.pending)) ?? 0;
   shownDaily = daily;
   setScore(el.dailyScore, daily, fresh ? fromDaily : undefined);
   el.dailyScore.className = `score ${scoreClass(daily)}`;
   el.dailyScoreCaption.textContent = hasCompletedToday()
     ? "Daily score — average of all 3 attempts"
     : `Daily score so far — average of ${attempts.length} of ${MAX_ATTEMPTS}`;
+  if (anyPending(attempts)) {
+    el.dailyScoreCaption.textContent += " · judging paused, one attempt still to be scored";
+  }
 
   // The list is rebuilt, so only the newest row is marked to reveal.
   const rows = attempts.map(attemptRow);
@@ -495,7 +564,7 @@ function renderAttempts({ landed = false } = {}) {
  * is still a guess left to make: shown once today's riddle is finished, gone
  * again once all 3 bonus guesses are used. */
 function updatePlayBonusButton(animate = false) {
-  const show = hasCompletedToday() && leaderboardEnabled() && !hasCompletedBonus();
+  const show = !SERVER_JUDGED && hasCompletedToday() && leaderboardEnabled() && !hasCompletedBonus();
   if (show) showEl(el.playBonusButton, animate);
   else el.playBonusButton.hidden = true;
 }
@@ -552,7 +621,7 @@ function todayRowNode(entry, rank) {
       answer.title = attempt.answer ?? "";
       const score = document.createElement("span");
       score.className = "row-attempt-score";
-      score.textContent = boardScore(attempt.score);
+      score.textContent = attempt.verdict ? verdictText(attempt) : boardScore(attempt.score);
       item.append(label, answer, score);
       list.append(item);
     }
@@ -611,12 +680,30 @@ let pollTimer = null;
 function startPolling() {
   if (!leaderboardEnabled() || pollTimer) return;
   pollTimer = setInterval(() => {
-    if (!document.hidden) refreshBoard();
+    if (document.hidden) return;
+    refreshBoard();
+    if (anyPending(attempts)) refreshPendingAttempts();
   }, 7000);
 }
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshBoard();
 });
+
+/** While an attempt is pending, pick up its verdict as soon as the cron has
+ * scored it, so the player sees it without reloading. */
+async function refreshPendingAttempts() {
+  try {
+    const server = await fetchAttempts(challenge.id);
+    if (!Array.isArray(server?.attempts)) return;
+    const before = anyPending(attempts);
+    attempts = server.attempts;
+    setLocalAttempts(challenge.id, attempts);
+    if (before && !anyPending(attempts)) renderAttempts({ landed: true });
+    else renderAttempts();
+  } catch {
+    // Try again on the next tick.
+  }
+}
 
 // --- rendering: yesterday's strongest interpretations -----------------------
 //
@@ -929,16 +1016,19 @@ el.archivePlay.addEventListener("submit", async (event) => {
   el.archiveSubmit.querySelector(".submit-label").textContent = "Judging…";
 
   try {
-    // Shares the same judge instance as today's riddle (loadJudge() is
-    // idempotent) - loaded on demand here since a player who already
-    // finished today's riddle may never have triggered prepareJudge().
-    await loadJudge();
-    const verdict = await scoreAnswer({
-      answer,
-      statement: archiveChallenge.noulStatement,
-      penaltyStatement: archiveChallenge.penaltyStatement,
-      penaltyExponent: archiveChallenge.penaltyExponent,
-    });
+    let verdict = null;
+    if (!serverJudged(archiveChallenge.scoringVersion)) {
+      // Shares the same judge instance as today's riddle (loadJudge() is
+      // idempotent) - loaded on demand here since a player who already
+      // finished today's riddle may never have triggered prepareJudge().
+      await loadJudge();
+      verdict = await scoreAnswer({
+        answer,
+        statement: archiveChallenge.noulStatement,
+        penaltyStatement: archiveChallenge.penaltyStatement,
+        penaltyExponent: archiveChallenge.penaltyExponent,
+      });
+    }
 
     const normalized = normalizeAnswer(answer);
     const hash = await answerHash({
@@ -957,9 +1047,7 @@ el.archivePlay.addEventListener("submit", async (event) => {
       answer,
       normalizedAnswer: normalized,
       answerHash: hash,
-      noul: verdict.noul,
-      score: verdict.score,
-      model: verdict.model,
+      ...(verdict ? { noul: verdict.noul, score: verdict.score, model: verdict.model } : {}),
     });
 
     if (Array.isArray(response?.attempts)) archiveAttemptsList = response.attempts;
@@ -979,6 +1067,8 @@ el.archivePlay.addEventListener("submit", async (event) => {
       showArchiveError("All 3 archive attempts are already used for this day.");
     } else if (err.status === 409 && err.body?.error === "duplicate_answer") {
       showArchiveError("You've already submitted that answer for this day.");
+    } else if (err.status === 400 && err.body?.error === "junk_answer") {
+      showArchiveError(err.body.hint || err.message);
     } else {
       showArchiveError(err?.message || "Something went wrong scoring that. Try again.");
     }
@@ -1099,7 +1189,8 @@ let bonusInitialized = false;
 let booted = false; // set once the page's first render is done
 
 async function initBonusIfUnlocked() {
-  if (!leaderboardEnabled()) {
+  // The bonus round was scored by the in-browser model, which v6 retires.
+  if (SERVER_JUDGED || !leaderboardEnabled()) {
     el.bonus.hidden = true;
     return;
   }
@@ -1372,9 +1463,13 @@ el.play.addEventListener("submit", async (event) => {
   // only how this one label reads while judging. Deliberately no mention
   // of WASM/WebGPU/ORT/q4 - same vague-but-honest phrasing either way.
   el.submit.querySelector(".submit-label").textContent =
-    judgeRuntime()?.device === "server-wasm" ? "Checking your answer…" : "Judging…";
+    SERVER_JUDGED || judgeRuntime()?.device === "server-wasm" ? "Checking your answer…" : "Judging…";
 
   try {
+    if (SERVER_JUDGED) {
+      await submitJudged(name, answer);
+      return;
+    }
     const verdict = await scoreAnswer({
       answer,
       statement: challenge.noulStatement,
@@ -1490,6 +1585,63 @@ el.play.addEventListener("submit", async (event) => {
   }
 });
 
+/** v6: send the answer, show the verdict. The worker judges (cache first),
+ * refuses junk without spending an attempt, and records a pending attempt if
+ * judging is paused. Errors the player can act on are shown; anything else
+ * asks for a retry. */
+async function submitJudged(name, answer) {
+  if (!leaderboardEnabled()) {
+    showError("The judge is offline right now. Try again in a moment.");
+    return;
+  }
+  const normalized = normalizeAnswer(answer);
+  const hash = await answerHash({
+    challengeId: challenge.id,
+    scoringVersion: challenge.scoringVersion,
+    normalizedAnswer: normalized,
+  });
+  rememberName(name);
+  try {
+    const response = await submit({
+      challengeId: challenge.id,
+      dayKey: challenge.dayKey,
+      scoringVersion: challenge.scoringVersion,
+      name,
+      answer,
+      normalizedAnswer: normalized,
+      answerHash: hash,
+    });
+    if (Array.isArray(response?.attempts)) {
+      attempts = response.attempts;
+      setLocalAttempts(challenge.id, attempts);
+    }
+    renderAttempts({ landed: true });
+    if (response?.leaderboard) renderBoard(response.leaderboard);
+    else await refreshBoard();
+    clearAnswerInput();
+  } catch (err) {
+    if (err.status === 400 && err.body?.error === "junk_answer") {
+      showError(err.body.hint || err.message);
+    } else if (err.status === 409 && err.body?.error === "max_attempts") {
+      try {
+        const server = await fetchAttempts(challenge.id);
+        attempts = server.attempts ?? attempts;
+        setLocalAttempts(challenge.id, attempts);
+      } catch {
+        // Keep what we had.
+      }
+      renderAttempts();
+      showError("All 3 attempts are already used for today.");
+    } else if (err.status === 409 && err.body?.error === "duplicate_answer") {
+      showError("You've already submitted that answer.");
+    } else if (err.status === 429) {
+      showError("Slow down a little: too many answers from here. Try again in a few minutes.");
+    } else {
+      showError("Couldn't reach the judge. Check your connection and try again.");
+    }
+  }
+}
+
 // --- boot ------------------------------------------------------------------
 
 renderChallenge();
@@ -1547,7 +1699,15 @@ function describeErrorChain(err) {
   return parts.join(" <- caused by: ");
 }
 
-if (hasCompletedToday()) {
+if (SERVER_JUDGED) {
+  // The worker judges: nothing to download. Straight to the form.
+  el.preparing.hidden = true;
+  if (!hasCompletedToday()) {
+    el.play.hidden = false;
+    el.name.value = savedName();
+    updateCounter();
+  }
+} else if (hasCompletedToday()) {
   // Already done for today: no reason to download a 365MB model just to show
   // a screen that says so.
   el.preparing.hidden = true;
