@@ -42,7 +42,7 @@ worst error: it rewards nonsense). False-wrong = a valid answer called wrong.
 | Gemini · gemini-3.5-flash-lite | 530 | 72.8% | 7.5% (30) | 0.8% (1) | 871 ms | 320/94 | 500 |
 | Workers AI · llama-3.1-8b-instruct-fp8 | 600 | 57.2% | **31.3% (141)** | 1.3% (2) | 5,406 ms | 328/102 | ≈1,400 |
 | Workers AI · gemma-4-26b-a4b-it | 60 | 46.7% | 0% | 0% | 25,095 ms | 337/1253 | ≈850 |
-| Workers AI · openai/gpt-oss-20b | running | | | | | | ≈480 |
+| Workers AI · openai/gpt-oss-20b | 420 | 76.0% | 6.6% (21) | 1.9% (2) | 1,319 ms | 379/147 | ≈480 |
 | OpenRouter · gemma-4-26b:free | 0 | upstream rate-limited on every call | | | | | 50 |
 
 Per category, accuracy and how the verdicts fell (correct/close/wrong):
@@ -52,6 +52,7 @@ Per category, accuracy and how the verdicts fell (correct/close/wrong):
 | Groq · Qwen 3.8 27B | 100% | 84% (92/16/2) | 80% (16/85/5) | 62% (2/19/34) | 48% (8/49/53) | 98% | 98% |
 | Groq · gpt-oss-20b | 96% | 76% (69/19/3) | 75% (15/68/8) | 65% (1/15/30) | 62% (8/26/56) | 100% | 92% |
 | Gemini 3.5 Flash-Lite | 100% | 87% (90/13/1) | 76% (16/77/9) | 32% (2/34/17) | 50% (11/43/53) | 87% | 90% |
+| Workers AI gpt-oss-20b | 95% | 65% (54/27/2) | 83% (7/69/5) | 64% (2/13/27) | 63% (5/25/54) | 95% | 87% |
 | Workers AI Llama 3.1 8B | 87% | 82% | 31% (63/37/11) | 43% (25/9/26) | 35% (40/36/43) | 72% | 77% |
 
 What the numbers say:
@@ -83,9 +84,9 @@ pre-warming and for flagged-verdict reviews. Results will be added here.
   and about 475 judge calls a day. With the cache and pre-warming, a day of
   Ridd-le at current traffic (a handful of players, 3 attempts each) uses a
   few dozen.
-- **Backup: Cloudflare Workers AI, `@cf/openai/gpt-oss-20b`** (pending its
-  run; it is the same model as Groq's gpt-oss-20b, which scored 78%). A
-  different company, no training on inputs, published limits, no key to
+- **Backup: Cloudflare Workers AI, `@cf/openai/gpt-oss-20b`**: 76% accuracy
+  and the joint-lowest false-correct rate (6.6%) on 420 cases, a touch stricter
+  on valid alternatives than the primary. A different company, no training on inputs, published limits, no key to
   manage, and the same account the worker already runs on. If its run
   disappoints, Gemini 3.5 Flash-Lite is the alternative at 500 calls a day,
   with the caveat that Google's free tier may train on the prompts (riddle,

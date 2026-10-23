@@ -50,7 +50,7 @@ async function groq(text) {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-    body: JSON.stringify({ model: "openai/gpt-oss-120b", temperature: 0.7, max_tokens: 1500, messages: [{ role: "user", content: text }] }),
+    body: JSON.stringify({ model: "openai/gpt-oss-120b", temperature: 0.7, max_tokens: 4000, reasoning_effort: "low", messages: [{ role: "user", content: text }] }),
   });
   if (!res.ok) throw new Error(`groq ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const json = await res.json();
@@ -85,6 +85,6 @@ for (const c of CHALLENGES) {
   existing[c.slug] = answers;
   fs.writeFileSync(OUT, JSON.stringify(existing, null, 1) + "\n");
   console.log(`${c.slug}: ${answers.length}`);
-  await new Promise((r) => setTimeout(r, 7_000));
+  await new Promise((r) => setTimeout(r, 25_000)); // Groq: 8k tokens a minute
 }
 console.log(`written ${path.relative(process.cwd(), OUT)}: ${Object.keys(existing).length} riddles`);
