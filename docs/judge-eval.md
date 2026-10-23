@@ -29,20 +29,21 @@ model's numbers below, identically.
 
 ## Results
 
-Interim: the daily caps above mean one full pass takes more than a day on
-Groq and Gemini. Numbers are over the cases judged so far (shown per row) and
-will be updated when the runs finish. Accuracy = verdict equals the label.
+Numbers are over the cases each model judged (shown per row); where a daily
+cap stopped a run short, the unjudged cases are left out rather than counted
+as errors. Accuracy = verdict equals the label.
 False-correct = a case labelled close or wrong that was called correct (the
 worst error: it rewards nonsense). False-wrong = a valid answer called wrong.
 
 | Model | Cases | Accuracy | False-correct | False-wrong on valid | Median latency | Tokens in/out | Daily capacity (free) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Groq · qwen/qwen3.8-27b | **600** | 77.8% | 6.7% (30) | 1.3% (2) | 266 ms | 338/81 | ≈475 |
-| Groq · openai/gpt-oss-20b | 462 | 77.9% | 7.8% (27) | 2.6% (3) | 444 ms | 415/141 | ≈350 |
+| Groq · openai/gpt-oss-20b | 596 | 74.8% | 7.6% (34) | 4.0% (6) | 440 ms | 415/141 | ≈350 |
 | Gemini · gemini-3.5-flash-lite | 530 | 72.8% | 7.5% (30) | 0.8% (1) | 871 ms | 320/94 | 500 |
 | Workers AI · llama-3.1-8b-instruct-fp8 | 600 | 57.2% | **31.3% (141)** | 1.3% (2) | 5,406 ms | 328/102 | ≈1,400 |
 | Workers AI · gemma-4-26b-a4b-it | 60 | 46.7% | 0% | 0% | 25,095 ms | 337/1253 | ≈850 |
 | Workers AI · openai/gpt-oss-20b | 420 | 76.0% | 6.6% (21) | 1.9% (2) | 1,319 ms | 379/147 | ≈480 |
+| Gemini · gemini-3.8-flash | 24 | quota shared with Flash-Lite was already spent; not enough cases to score | | | | | 500 |
 | OpenRouter · gemma-4-26b:free | 0 | upstream rate-limited on every call | | | | | 50 |
 
 Per category, accuracy and how the verdicts fell (correct/close/wrong):
