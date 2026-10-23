@@ -3,10 +3,10 @@
   "provider": "gemini-3.5-flash-lite",
   "model": "gemini/gemini-3.5-flash-lite",
   "promptVersion": 1,
-  "at": "2026-10-23T01:01:16.626Z",
-  "cases": 530,
+  "at": "2026-10-23T03:30:07.290Z",
+  "cases": 533,
   "repeat": 1,
-  "accuracy": 72.8,
+  "accuracy": 73,
   "byCategory": {
    "intended": {
     "n": 28,
@@ -19,21 +19,21 @@
     }
    },
    "alt": {
-    "n": 104,
-    "accuracy": 86.5,
+    "n": 105,
+    "accuracy": 86.7,
     "verdicts": {
-     "correct": 90,
+     "correct": 91,
      "close": 13,
      "wrong": 1,
      "other": 0
     }
    },
    "near": {
-    "n": 102,
-    "accuracy": 75.5,
+    "n": 103,
+    "accuracy": 75.7,
     "verdicts": {
      "correct": 16,
-     "close": 77,
+     "close": 78,
      "wrong": 9,
      "other": 0
     }
@@ -59,12 +59,12 @@
     }
    },
    "nonsense": {
-    "n": 52,
-    "accuracy": 86.5,
+    "n": 53,
+    "accuracy": 86.8,
     "verdicts": {
      "correct": 0,
      "close": 7,
-     "wrong": 45,
+     "wrong": 46,
      "other": 0
     }
    },
@@ -87,14 +87,14 @@
   "unparseable": 0,
   "consistency": null,
   "latencyMs": {
-   "median": 871,
-   "p90": 3905
+   "median": 875,
+   "p90": 3892
   },
   "tokensPerCall": {
    "input": 320,
    "output": 94
   },
-  "modelCalls": 489
+  "modelCalls": 492
  },
  "rows": [
   {
@@ -19045,6 +19045,43 @@
    "slug": "known-only-by-absence",
    "prompt": "What can you only notice once it is gone?",
    "example": "a background noise",
+   "answer": "a celebrity",
+   "label": "close",
+   "cat": "near",
+   "reps": [
+    {
+     "verdict": "close",
+     "hint": "but do you overlook it while it's there?",
+     "perClue": [
+      {
+       "id": "unnoticed-present",
+       "pass": false,
+       "reason": "Celebrities are usually very heavily noticed while present."
+      },
+      {
+       "id": "noticed-gone",
+       "pass": true,
+       "reason": "The absence of a celebrity from an event is noticed."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "A celebrity is a specific category of person."
+      }
+     ],
+     "latencyMs": 867,
+     "usage": {
+      "input": 316,
+      "output": 72
+     },
+     "cached": true
+    }
+   ]
+  },
+  {
+   "slug": "known-only-by-absence",
+   "prompt": "What can you only notice once it is gone?",
+   "example": "a background noise",
    "answer": "a thing",
    "label": "wrong",
    "cat": "vague",
@@ -19057,6 +19094,43 @@
      "usage": {
       "input": 0,
       "output": 0
+     },
+     "cached": true
+    }
+   ]
+  },
+  {
+   "slug": "known-only-by-absence",
+   "prompt": "What can you only notice once it is gone?",
+   "example": "a background noise",
+   "answer": "vfr bgt",
+   "label": "wrong",
+   "cat": "nonsense",
+   "reps": [
+    {
+     "verdict": "wrong",
+     "hint": "but do you overlook it while it's there?",
+     "perClue": [
+      {
+       "id": "unnoticed-present",
+       "pass": false,
+       "reason": "This is meaningless gibberish, not a real thing."
+      },
+      {
+       "id": "noticed-gone",
+       "pass": false,
+       "reason": "Nonsense words cannot be noticed or gone."
+      },
+      {
+       "id": "specific",
+       "pass": false,
+       "reason": "It is random keyboard smashing, not a specific thing."
+      }
+     ],
+     "latencyMs": 889,
+     "usage": {
+      "input": 318,
+      "output": 132
      },
      "cached": true
     }
@@ -19099,6 +19173,43 @@
      "usage": {
       "input": 0,
       "output": 0
+     },
+     "cached": true
+    }
+   ]
+  },
+  {
+   "slug": "finished-but-never-done",
+   "prompt": "What can be finished and still never done?",
+   "example": "an apology",
+   "answer": "housework",
+   "label": "correct",
+   "cat": "alt",
+   "reps": [
+    {
+     "verdict": "correct",
+     "hint": null,
+     "perClue": [
+      {
+       "id": "finishable",
+       "pass": true,
+       "reason": "Housework can be finished for the day."
+      },
+      {
+       "id": "never-done",
+       "pass": true,
+       "reason": "Housework is never truly done because it always recurs."
+      },
+      {
+       "id": "specific",
+       "pass": true,
+       "reason": "Housework is a specific, well-defined activity category."
+      }
+     ],
+     "latencyMs": 951,
+     "usage": {
+      "input": 315,
+      "output": 129
      },
      "cached": true
     }
