@@ -61,7 +61,7 @@ const ask = provider === "groq" ? groq : gemini;
 
 for (const c of CHALLENGES) {
   if (args.only && c.slug !== args.only) continue;
-  if (existing[c.slug]?.length >= 80 && !args.only) continue;
+  if (existing[c.slug]?.length >= 60 && !args.only) continue;
   let text;
   try {
     text = await ask(prompt(c));

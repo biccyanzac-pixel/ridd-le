@@ -86,6 +86,9 @@ async function judgeOnce(model, providerKey, c, rep) {
     const saved = JSON.parse(fs.readFileSync(file, "utf8"));
     return { ...interpret(c.slug, saved.text), latencyMs: saved.latencyMs, usage: saved.usage, cached: true };
   }
+  // --cached-only: an interim summary over what has been judged so far,
+  // without spending quota; uncached cases are left out, not counted.
+  if (args["cached-only"]) return { skip: true };
   const req = { system: systemPrompt(), user: userPrompt(c), schema: responseSchema(c.slug), slug: c.slug };
   let attempt = 0;
   for (;;) {
@@ -144,15 +147,17 @@ async function runCandidate(providerKey) {
       } catch (err) {
         r = { verdict: "error", hint: null, error: String(err.message).slice(0, 200), latencyMs: 0, usage: { input: 0, output: 0 } };
       }
+      if (r.skip) break;
       if (!r.cached) lastCall = Date.now();
       if (!r.cached && wait > 0) await sleep(wait);
       reps.push(r);
       n += 1;
       process.stderr.write(`\r${model.name}: ${n}/${list.length * repeat}  ${c.slug} / "${c.answer}" -> ${r.verdict}${r.cached ? " (cached)" : ""}      `);
     }
-    rows.push({ ...c, reps });
+    if (reps.length) rows.push({ ...c, reps });
   }
   process.stderr.write("\n");
+  if (args["cached-only"]) console.log(`(interim: ${rows.length} of ${list.length} cases judged so far)`);
   const summary = summarise(providerKey, model.name, rows, repeat);
   fs.mkdirSync(RESULTS, { recursive: true });
   const outFile = path.join(RESULTS, `${providerKey}${repeat > 1 ? ".consistency" : ""}.json`);

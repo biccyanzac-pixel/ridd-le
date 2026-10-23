@@ -118,3 +118,32 @@ Rebuild and redeploy the web app (push to `main`, or `npm run build` in
   data entirely) gets a fresh identity and therefore a fresh 3 attempts. There
   is no login system in this version, so identity is "this browser session",
   documented, not solved with real accounts here.
+
+## The judge (scoring v6, `src/judge.js`)
+
+From 24 October 2026 this worker judges every answer itself. `POST /api/play`
+takes `{ challengeId, dayKey, name, answer, answerHash, playerId, token }`
+(no `noul`/`score`: the browser runs no model) and answers with
+`result.verdict` (`correct` | `close` | `wrong` | `pending`), `result.hint`,
+`result.score` (100 / 50 / 0) and `result.cacheKey`. Junk answers come back
+`400 junk_answer` with a `hint` and cost no attempt. `pending` means judging
+is paused (both providers at their daily limit, or a provider error): the
+attempt is recorded with `judged = 0`, queued in `judge_queue`, and scored by
+the 10-minute cron; `GET /api/attempts` shows the verdict once it lands.
+
+- `POST /api/judge/flag { cacheKey, playerId, token }`: "wrong verdict?" on
+  one of the player's own answers.
+- Owner endpoints, `Authorization: Bearer <JUDGE_ADMIN_TOKEN>`:
+  `GET /api/judge/log?day=YYYY-MM-DD` (every verdict that day, no player ids,
+  plus all flagged verdicts), `GET /api/judge/summary?days=7`,
+  `POST /api/judge/override { cacheKey, verdict, hint? }` (replaces the cached
+  verdict and rescores every attempt that gave that answer),
+  `POST /api/judge/run` (do the cron's work now).
+- Config: `JUDGE_PRIMARY` / `JUDGE_BACKUP` (`cloudflare` | `groq` | `gemini`),
+  their `_MODEL` and `_DAILY` call budgets in `wrangler.toml`; secrets
+  `GROQ_API_KEY`, `GEMINI_API_KEY`, `JUDGE_ADMIN_TOKEN`.
+- Tables (migration 0002): `judge_verdicts` (the cache, never expires),
+  `judge_quota`, `judge_rate` (hashed address per hour), `judge_queue`,
+  `judge_log`; `submissions` gains `verdict`, `hint`, `cache_key`, `judged`.
+- Test: `test/judge.e2e.mjs` (the command to start the local worker with the
+  mock provider is in its header).

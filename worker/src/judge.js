@@ -64,6 +64,14 @@ const PROVIDERS = {
   mock,
   cloudflare: {
     async call(env, model, req) {
+      if (/gpt-oss/.test(model)) {
+        // The gpt-oss models on Workers AI take the Responses API shape.
+        const result = await withTimeout(
+          env.AI.run(model, { instructions: req.system, input: req.user, reasoning: { effort: "low" } }),
+        );
+        const msg = (result?.output ?? []).find((o) => o.type === "message");
+        return msg?.content?.map((c) => c.text ?? "").join("") ?? JSON.stringify(result);
+      }
       const body = {
         messages: [
           { role: "system", content: req.system },

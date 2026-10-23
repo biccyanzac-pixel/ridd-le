@@ -111,6 +111,15 @@ export const openrouter = (model, extra) =>
 export const cloudflare = (model) => ({
   name: `cloudflare/${model.replace(/^@cf\//, "")}`,
   async complete({ system, user }) {
+    if (/gpt-oss/.test(model)) {
+      // The gpt-oss models on Workers AI take the Responses API shape.
+      const { json, latencyMs } = await post(`${CF_PROXY}/run`, {}, { model, instructions: system, input: user, reasoning: { effort: "low" } });
+      const out = json?.output ?? [];
+      const msg = out.find((o) => o.type === "message");
+      const text = msg?.content?.map((c) => c.text ?? "").join("") ?? JSON.stringify(json);
+      const u = json?.usage ?? {};
+      return { text, usage: { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0 }, latencyMs, raw: json };
+    }
     const body = {
       model,
       messages: [
@@ -159,5 +168,6 @@ export const CANDIDATES = {
   "openrouter-gemma-4-26b": () => openrouter("google/gemma-4-26b-a4b-it:free"),
   "cf-llama-3.1-8b-fp8": () => cloudflare("@cf/meta/llama-3.1-8b-instruct-fp8"),
   "cf-gemma-4-26b": () => cloudflare("@cf/google/gemma-4-26b-a4b-it"),
+  "cf-gpt-oss-20b": () => cloudflare("@cf/openai/gpt-oss-20b"),
   "cf-llama-3.3-70b": () => cloudflare("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
 };
