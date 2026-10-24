@@ -45,7 +45,7 @@
  * trade-off for a free, local-inference game - see README.md.
  */
 
-import { challengeForDay } from "../../shared/challenges.js";
+import { bonusChallengeForDay, challengeForDay } from "../../shared/challenges.js";
 import {
   PENDING,
   VERDICT_SCORE,
@@ -54,6 +54,7 @@ import {
   enqueue,
   flagVerdict,
   judgeAnswer,
+  bonusJudgeChallenge,
   overrideVerdict,
   prewarm,
   weeklySummary,
@@ -669,11 +670,6 @@ async function handlePlay(request, env, ip) {
   // mismatch here would reject every submission for that day.
   const scoringVersion = kind === "main" ? scoringVersionForDay(day) : bonusVersionForDay(day);
 
-  if (kind === "bonus" && scoringVersionForDay(day) >= 6) {
-    // The bonus round was judged by the browser model, which v6 retires.
-    return fail("bonus_retired", "The bonus round has finished its run.", 410, env);
-  }
-
   if (kind === "bonus") {
     // The bonus round has no archive/replay - it only ever exists for
     // today, unlocked only after today's main riddle is finished. Checked
@@ -699,8 +695,10 @@ async function handlePlay(request, env, ip) {
   const answer = validateAnswer(body.answer);
   if (!answer) return fail("bad_answer", "Write an answer first.", 400, env);
 
-  if (kind === "main" && scoringVersion >= 6) {
+  if (scoringVersionForDay(day) >= 6) {
+    // v6: the worker judges both the riddle and the bonus round.
     return handlePlayJudged(env, ip, {
+      kind,
       playerId,
       name,
       answer,
@@ -874,7 +872,7 @@ async function handlePlay(request, env, ip) {
  * and recorded with its verdict. If judging is paused the attempt is still
  * recorded, as pending, and the cron scores it later.
  */
-async function handlePlayJudged(env, ip, { playerId, name, answer, day, isLate, expectedChallengeId, scoringVersion, answerHash: sentHash }) {
+async function handlePlayJudged(env, ip, { kind, playerId, name, answer, day, isLate, expectedChallengeId, scoringVersion, answerHash: sentHash }) {
   const normalized = normalizeAnswer(answer);
   const expectedHash = await answerHash({ challengeId: expectedChallengeId, scoringVersion, normalizedAnswer: normalized });
   if (sentHash !== expectedHash) {
@@ -893,7 +891,7 @@ async function handlePlayJudged(env, ip, { playerId, name, answer, day, isLate, 
     return fail("max_attempts", full, 409, env);
   }
 
-  const challenge = challengeForDay(day);
+  const challenge = kind === "bonus" ? bonusJudgeChallenge(bonusChallengeForDay(day).word) : challengeForDay(day);
   const verdict = await judgeAnswer(env, { challenge, answer, ip, day: todayKey() });
   if (verdict.source === "junk") {
     // Not an attempt: the player is told what's missing and keeps the slot.

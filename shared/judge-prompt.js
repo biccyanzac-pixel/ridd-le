@@ -12,9 +12,9 @@
  * the rule is deterministic and testable, and the model's only job is to
  * rate small, specific questions.
  */
-import { cluesFor, scoreFrom } from "./clues.js";
+import { FACETS, cluesFor, scoreFrom } from "./clues.js";
 
-export const JUDGE_PROMPT_VERSION = 3;
+export const JUDGE_PROMPT_VERSION = 4;
 
 export function systemPrompt() {
   return [
@@ -22,11 +22,11 @@ export function systemPrompt() {
     "any answer that genuinely satisfies the riddle's clues deserves a high rating, however",
     "unexpected. Judge the candidate answer on its own merits, charitably but honestly, the way",
     "a thoughtful quizmaster would. Rate each clue from 0 (not at all) to 100 (perfectly) for how",
-    "well the candidate satisfies it, then give an overall rating for how satisfying X is as an",
-    "answer to the whole riddle: fit, precision and wit together. Use precise integers (73, 88,",
-    "41), never round multiples of 5 or 10, and spread them: a clean but ordinary fit is around",
-    "75 to 88, only a perfect and surprising fit reaches 95 or more, a stretch sits in the 40s",
-    "to 60s. Two different answers should almost never get identical ratings. Rate low an",
+    "well the candidate satisfies it, then rate four facets of the answer as a whole: overall,",
+    "precision, wit, naturalness. Use precise integers (73, 88, 41), never round multiples of 5",
+    "or 10, and spread them: a clean but ordinary fit is around 75 to 88, only a perfect and",
+    "surprising fit reaches 95 or more, a stretch sits in the 40s to 60s. Two different answers",
+    "should almost never get identical ratings. Rate low an",
     "answer that merely restates the riddle, names a vague category, or talks to you instead",
     "of answering. Never penalise an answer for differing from the example. Give a reason of",
     "at most 15 words per clue. Reply with JSON only, no prose, no markdown fences.",
@@ -38,16 +38,17 @@ export function userPrompt({ prompt, slug, example, answer }) {
   const lines = clues.map((c, i) => `${i + 1}. [${c.id}] ${c.q}`);
   return [
     `Riddle: "${prompt}"`,
-    `One example of a strong answer (not the only one): "${example}"`,
+    ...(example ? [`One example of a strong answer (not the only one): "${example}"`] : []),
     `Candidate answer X: "${answer}"`,
     "",
     "Clues. For each, how well does X satisfy it, 0 to 100?",
     ...lines,
     "",
-    "Then overall: how satisfying is X as an answer to this riddle, 0 to 100?",
+    "Then the answer as a whole, 0 to 100 each:",
+    ...FACETS.map((f) => `- ${f.id}: ${f.q}`),
     "",
     "Reply with exactly this JSON shape:",
-    `{"clues":[${clues.map((c) => `{"id":"${c.id}","score":0,"reason":"..."}`).join(",")}],"overall":0}`,
+    `{"clues":[${clues.map((c) => `{"id":"${c.id}","score":0,"reason":"..."}`).join(",")}],${FACETS.map((f) => `"${f.id}":0`).join(",")}}`,
   ].join("\n");
 }
 
@@ -69,9 +70,9 @@ export function responseSchema(slug) {
           required: ["id", "score", "reason"],
         },
       },
-      overall: { type: "integer" },
+      ...Object.fromEntries(FACETS.map((f) => [f.id, { type: "integer" }])),
     },
-    required: ["clues", "overall"],
+    required: ["clues", ...FACETS.map((f) => f.id)],
   };
 }
 
@@ -117,9 +118,12 @@ export function parseJudgeReply(slug, text) {
     score = Math.min(100, Math.max(0, Math.round(score)));
     return { id: c.id, score, reason: String(item?.reason ?? "").slice(0, 160) };
   });
-  const overallRaw = Number(parsed?.overall);
-  if (!Number.isFinite(overallRaw)) throw new Error("judge reply was incomplete: no overall rating");
-  const overall = Math.min(100, Math.max(0, Math.round(overallRaw)));
-  const { score, hint, bucket } = scoreFrom(clues, perClue, overall);
-  return { score, hint, verdict: bucket, perClue, overall };
+  const facets = {};
+  for (const f of FACETS) {
+    const v = Number(parsed?.[f.id]);
+    if (!Number.isFinite(v)) throw new Error(`judge reply was incomplete: no ${f.id} rating`);
+    facets[f.id] = Math.min(100, Math.max(0, Math.round(v)));
+  }
+  const { score, hint, bucket } = scoreFrom(clues, perClue, facets);
+  return { score, hint, verdict: bucket, perClue, facets };
 }

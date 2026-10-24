@@ -21,6 +21,18 @@ import assert from "node:assert/strict";
 import { answerHash, normalizeAnswer } from "../../shared/normalize.js";
 import { bonusChallengeForDay, challengeForDay, todayKey } from "../../shared/challenges.js";
 import { judgeCacheKey } from "../../shared/judge-normalize.js";
+import { FACETS, cluesFor, scoreFrom } from "../../shared/clues.js";
+
+// What the mock provider's ratings come to (see the mock in src/judge.js).
+const facetsOf = (v) => Object.fromEntries(FACETS.map((f) => [f.id, v]));
+function expectedScore(slug, kind) {
+  const clues = cluesFor(slug);
+  const ratings = clues.map((c, i) =>
+    kind === "good" ? 95 : kind === "near" ? (i === 0 ? 20 : 90) : c.id === "specific" ? 90 : 10,
+  );
+  return scoreFrom(clues, ratings.map((score) => ({ score })), facetsOf(kind === "good" ? 95 : kind === "near" ? 60 : 20)).score;
+}
+const near = (a, b) => Math.abs(a - b) < 0.011;
 
 const BASE = process.argv[2] || "http://127.0.0.1:8789";
 const ADMIN = { Authorization: "Bearer test-admin" };
@@ -74,7 +86,9 @@ const before = await quotaCalls();
   }
   const after = await quotaCalls();
   check("100 requests with 20 distinct answers reach the model at most 20 times", after - before <= 20, `model calls: ${after - before}`);
-  check("every one of the 100 got a real score", results.every((r) => r?.result?.score === 95), results.filter((r) => r?.result?.score !== 95).length + " didn't");
+  const GOOD = expectedScore(challenge.slug, "good");
+  check("every one of the 100 got a real score", results.every((r) => near(r?.result?.score ?? -1, GOOD)), results.filter((r) => !near(r?.result?.score ?? -1, GOOD)).length + " didn't");
+  check("no answer scores 100", results.every((r) => r?.result?.score < 100) && GOOD < 100, String(GOOD));
   const cachedCount = results.filter((r) => r?.result?.cached).length;
   check("at least 80 of them were served from the cache", cachedCount >= 80, `cached: ${cachedCount}`);
 }
@@ -83,14 +97,14 @@ const before = await quotaCalls();
 {
   const p = await session();
   const good = (await play(p, "good umbrella")).body;
-  const near = (await play(p, "near umbrella")).body;
+  const nearR = (await play(p, "near umbrella")).body;
   const wrong = (await play(p, "bad umbrella")).body;
-  // mock ratings (three clues + overall): good 95; near 20/90/90 + 60 = 65; bad 10/10/90 + 20 = 32.5.
-  check("a strong answer scores high with no hint", good.result.score === 95 && good.result.hint === null, String(good.result.score));
-  check("a near-miss scores in the middle with the weakest clue's hint", near.result.score === 65 && typeof near.result.hint === "string" && near.result.hint.length > 5, `${near.result.score} / ${near.result.hint}`);
-  check("a poor answer scores low with a hint", wrong.result.score === 32.5 && typeof wrong.result.hint === "string", String(wrong.result.score));
+  const [G, N, B] = ["good", "near", "bad"].map((k) => expectedScore(challenge.slug, k));
+  check("a strong answer scores high with no hint", near(good.result.score, G) && good.result.hint === null, `${good.result.score} vs ${G}`);
+  check("a near-miss scores in the middle with the weakest clue's hint", near(nearR.result.score, N) && typeof nearR.result.hint === "string" && nearR.result.hint.length > 5, `${nearR.result.score} / ${nearR.result.hint}`);
+  check("a poor answer scores low with a hint", near(wrong.result.score, B) && typeof wrong.result.hint === "string", `${wrong.result.score} vs ${B}`);
   const me = wrong.leaderboard.top.find((r) => r.you) ?? wrong.leaderboard.you;
-  check("the daily score is the average of the three", Math.abs(me.score - (95 + 65 + 32.5) / 3) < 0.01, String(me?.score));
+  check("the daily score is the average of the three", Math.abs(me.score - (G + N + B) / 3) < 0.02, String(me?.score));
   check("attempts carry a numeric score", wrong.attempts.every((a) => Number.isFinite(a.score)));
 }
 
@@ -120,9 +134,10 @@ const before = await quotaCalls();
   const run = (await call("/api/judge/run", { method: "POST", headers: ADMIN })).body;
   check("the cron drains the queue once the provider answers", run.drained >= 1, JSON.stringify(run));
   const after = (await call(`/api/attempts?challengeId=${encodeURIComponent(challenge.id)}&playerId=${p.playerId}`)).body;
-  check("the player's result updates on their next visit", after.attempts[0].pending === false && after.attempts[0].score === 32.5, JSON.stringify(after.attempts[0]));
+  const B2 = expectedScore(challenge.slug, "bad");
+  check("the player's result updates on their next visit", after.attempts[0].pending === false && near(after.attempts[0].score, B2), JSON.stringify(after.attempts[0]));
   const again = (await play(await session(), flakyAnswer.toUpperCase())).body;
-  check("the queued score is cached for everyone afterwards", again.result.cached === true && again.result.score === 32.5);
+  check("the queued score is cached for everyone afterwards", again.result.cached === true && near(again.result.score, B2));
 }
 
 // === flags and overrides ====================================================
@@ -147,14 +162,23 @@ const before = await quotaCalls();
   check("the override is what everyone gets from now on", next.result.score === 88 && next.result.cached === true);
 }
 
-// === the retired bonus round ================================================
+// === the bonus round, judged by the worker too ===============================
 {
   const p = await session();
   const bonus = bonusChallengeForDay(day);
-  const bonusId = bonus.id;
-  const hash = await answerHash({ challengeId: bonusId, scoringVersion: bonus.scoringVersion, normalizedAnswer: "x" });
-  const r = await call("/api/play", { method: "POST", body: JSON.stringify({ ...p, challengeId: bonusId, name: "T", answer: "x", answerHash: hash, noul: 0.5, score: 50 }) });
-  check("the bonus round is retired on v6 days", r.status === 410, `${r.status} ${JSON.stringify(r.body)}`);
+  async function bonusPlay(answer) {
+    const normalized = normalizeAnswer(answer);
+    const hash = await answerHash({ challengeId: bonus.id, scoringVersion: bonus.scoringVersion, normalizedAnswer: normalized });
+    return call("/api/play", { method: "POST", body: JSON.stringify({ ...p, challengeId: bonus.id, name: "T", answer, answerHash: hash }) });
+  }
+  const locked = await bonusPlay("good warmth");
+  check("the bonus round stays locked until the riddle is done", locked.status === 403 && locked.body?.error === "bonus_locked");
+  for (const a of ["good one", "good two", "good three"]) await play(p, a);
+  const r = await bonusPlay("good warmth");
+  const expectedBonus = expectedScore(`bonus-opposite/${bonus.word.toLowerCase()}`, "good");
+  check("a bonus guess is judged and scored", r.status === 200 && near(r.body?.result?.score ?? -1, expectedBonus), `${r.status} ${JSON.stringify(r.body?.result)}`);
+  const parrot = await bonusPlay(bonus.word);
+  check("the word itself is refused as junk", parrot.status === 400 && parrot.body?.error === "junk_answer", `${parrot.status} ${JSON.stringify(parrot.body)}`);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL JUDGE CHECKS PASSED");

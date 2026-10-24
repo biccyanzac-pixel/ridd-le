@@ -346,6 +346,7 @@ export const CLUES = {
 /** The full checklist for a riddle slug: its own clues plus the implicit
  * specificity clue, always last so a vague answer fails on substance first. */
 export function cluesFor(slug) {
+  if (typeof slug === "string" && slug.startsWith(BONUS_PREFIX)) return bonusCluesFor(slug.slice(BONUS_PREFIX.length));
   const entry = CLUES[slug];
   if (!entry) throw new Error(`no clue checklist for riddle: ${slug}`);
   return [...entry.clues, SPECIFICITY_CLUE];
@@ -375,32 +376,74 @@ export function verdictFrom(clues, results) {
 }
 
 /**
- * The 0 to 100 score from per-clue ratings, pure. `ratings` is aligned with
- * cluesFor(slug): { score: 0..100, reason? }. The answer's score is the
- * weighted mean of its clue ratings (soft clues count half), so there is no
- * right or wrong, only how fully the answer meets the riddle. The hint is
- * the weakest clue rephrased, when that clue rates under 60. `bucket` is a
+ * Beyond the clues, the judge rates four facets of the answer as a whole.
+ * They are what separates two answers that tick the same boxes.
+ */
+export const FACETS = Object.freeze([
+  { id: "overall", weight: 1, q: "Overall, how satisfying is X as an answer to this riddle?" },
+  { id: "precision", weight: 0.5, q: "How precisely does X fit the riddle, as opposed to loosely or with special pleading?" },
+  { id: "wit", weight: 0.5, q: "How clever or surprising is X, beyond the obvious answer?" },
+  { id: "natural", weight: 0.25, q: "How naturally does X read as a riddle answer, rather than an explanation, a list or an essay?" },
+]);
+
+// A weak prior at 50 that every score is shrunk towards, so no answer ever
+// reaches 100 (the best possible is about 96.5) and fine fractions appear:
+// the score is a posterior mean, not a tally.
+const PRIOR_SCORE = 50;
+const PRIOR_WEIGHT = 0.4;
+
+/**
+ * The 0 to 100 score from per-clue ratings and the facet ratings, pure.
+ * `ratings` is aligned with cluesFor(slug): { score: 0..100 }. `facets` is
+ * { overall, precision, wit, natural } (missing ones are left out of the
+ * mean). Required clues weigh 1, soft clues 0.5, facets as in FACETS, and
+ * the whole thing is shrunk towards 50 with weight 0.4. There is no right
+ * or wrong, only how fully the answer meets the riddle. The hint is the
+ * weakest clue rephrased, when that clue rates under 60. `bucket` is a
  * coarse label kept for the log and the cache table's column.
  */
-export function scoreFrom(clues, ratings, overall = null) {
+export function scoreFrom(clues, ratings, facets = null) {
   if (!Array.isArray(ratings) || ratings.length !== clues.length) {
     throw new TypeError("scoreFrom: one rating per clue is required");
   }
-  // The model's overall rating of the answer (fit, precision, wit) counts as
-  // one more full-weight rating, so two answers that tick the same boxes can
-  // still be told apart by how well they do it.
-  let sum = Number.isFinite(overall) ? Math.min(100, Math.max(0, overall)) : 0;
-  let weight = Number.isFinite(overall) ? 1 : 0;
+  if (typeof facets === "number") facets = { overall: facets };
+  const clamp = (v) => Math.min(100, Math.max(0, v));
+  let sum = PRIOR_SCORE * PRIOR_WEIGHT;
+  let weight = PRIOR_WEIGHT;
   let weakest = null;
   clues.forEach((c, i) => {
-    const r = Math.min(100, Math.max(0, Number(ratings[i]?.score) || 0));
+    const r = clamp(Number(ratings[i]?.score) || 0);
     const w = c.required ? 1 : 0.5;
     sum += r * w;
     weight += w;
     if (!weakest || r < weakest.rating) weakest = { clue: c, rating: r };
   });
-  const score = weight ? Math.round((sum / weight) * 100) / 100 : 0;
+  for (const f of FACETS) {
+    const v = Number(facets?.[f.id]);
+    if (!Number.isFinite(v)) continue;
+    sum += clamp(v) * f.weight;
+    weight += f.weight;
+  }
+  const score = Math.round((sum / weight) * 100) / 100;
   const hint = weakest && weakest.rating < 60 ? weakest.clue.hint : null;
   const bucket = score >= 70 ? "correct" : score >= 35 ? "close" : "wrong";
   return { score, hint, bucket, weakest: weakest?.clue.id ?? null };
+}
+
+// --- the bonus round: "what's the opposite of W?" ----------------------------------
+
+export const BONUS_PREFIX = "bonus-opposite/";
+
+/** The judge slug for a bonus word; the cache key is built from it. */
+export function bonusSlug(word) {
+  return `${BONUS_PREFIX}${String(word).toLowerCase()}`;
+}
+
+export function bonusCluesFor(word) {
+  const w = String(word);
+  return [
+    { id: "opposite", required: true, q: `Is X a genuine opposite, counterpart or reversal of "${w}", in some clear and defensible sense?`, hint: `but is it really the opposite of ${w}?` },
+    { id: "distinct", required: true, q: `Is X an actual thing or idea in its own right, not just "not ${w}", "un-${w}" or "${w}" negated?`, hint: `but that's just "${w}" with a "not" in front` },
+    SPECIFICITY_CLUE,
+  ];
 }
