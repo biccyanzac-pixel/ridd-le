@@ -74,7 +74,7 @@ const before = await quotaCalls();
   }
   const after = await quotaCalls();
   check("100 requests with 20 distinct answers reach the model at most 20 times", after - before <= 20, `model calls: ${after - before}`);
-  check("every one of the 100 got a real verdict", results.every((r) => r?.result?.verdict === "correct"), results.filter((r) => r?.result?.verdict !== "correct").length + " didn't");
+  check("every one of the 100 got a real score", results.every((r) => r?.result?.score === 95), results.filter((r) => r?.result?.score !== 95).length + " didn't");
   const cachedCount = results.filter((r) => r?.result?.cached).length;
   check("at least 80 of them were served from the cache", cachedCount >= 80, `cached: ${cachedCount}`);
 }
@@ -85,12 +85,13 @@ const before = await quotaCalls();
   const good = (await play(p, "good umbrella")).body;
   const near = (await play(p, "near umbrella")).body;
   const wrong = (await play(p, "bad umbrella")).body;
-  check("correct scores 100 with no hint", good.result.verdict === "correct" && good.result.score === 100 && good.result.hint === null);
-  check("close scores 50 with the failed clue's hint", near.result.verdict === "close" && near.result.score === 50 && typeof near.result.hint === "string" && near.result.hint.length > 5, near.result.hint);
-  check("wrong scores 0 with a hint", wrong.result.verdict === "wrong" && wrong.result.score === 0 && typeof wrong.result.hint === "string");
+  // mock ratings: good 95 everywhere; near 20/90/90; bad 10/10/90 (three clues).
+  check("a strong answer scores high with no hint", good.result.score === 95 && good.result.hint === null, String(good.result.score));
+  check("a near-miss scores in the middle with the weakest clue's hint", Math.abs(near.result.score - 66.67) < 0.01 && typeof near.result.hint === "string" && near.result.hint.length > 5, `${near.result.score} / ${near.result.hint}`);
+  check("a poor answer scores low with a hint", Math.abs(wrong.result.score - 36.67) < 0.01 && typeof wrong.result.hint === "string", String(wrong.result.score));
   const me = wrong.leaderboard.top.find((r) => r.you) ?? wrong.leaderboard.you;
-  check("the daily score is the average of the three", Math.abs(me.score - 50) < 0.001, String(me?.score));
-  check("attempts carry their verdict", wrong.attempts.map((a) => a.verdict).join() === "correct,close,wrong");
+  check("the daily score is the average of the three", Math.abs(me.score - (95 + 66.67 + 36.67) / 3) < 0.01, String(me?.score));
+  check("attempts carry a numeric score", wrong.attempts.every((a) => Number.isFinite(a.score)));
 }
 
 // === junk never costs an attempt ============================================
@@ -119,9 +120,9 @@ const before = await quotaCalls();
   const run = (await call("/api/judge/run", { method: "POST", headers: ADMIN })).body;
   check("the cron drains the queue once the provider answers", run.drained >= 1, JSON.stringify(run));
   const after = (await call(`/api/attempts?challengeId=${encodeURIComponent(challenge.id)}&playerId=${p.playerId}`)).body;
-  check("the player's result updates on their next visit", after.attempts[0].pending === false && after.attempts[0].verdict === "wrong" && after.attempts[0].score === 0, JSON.stringify(after.attempts[0]));
+  check("the player's result updates on their next visit", after.attempts[0].pending === false && Math.abs(after.attempts[0].score - 36.67) < 0.01, JSON.stringify(after.attempts[0]));
   const again = (await play(await session(), flakyAnswer.toUpperCase())).body;
-  check("the queued verdict is cached for everyone afterwards", again.result.cached === true && again.result.verdict === "wrong");
+  check("the queued score is cached for everyone afterwards", again.result.cached === true && Math.abs(again.result.score - 36.67) < 0.01);
 }
 
 // === flags and overrides ====================================================
@@ -138,12 +139,12 @@ const before = await quotaCalls();
   check("the log needs the admin token", noAdmin.status === 403);
   const log = (await call(`/api/judge/log?day=${day}`, { headers: ADMIN })).body;
   check("the daily log lists the flagged verdict and no player ids", log.flagged.some((f) => f.cache_key === key) && !JSON.stringify(log).includes(p.playerId));
-  const ov = (await call("/api/judge/override", { method: "POST", headers: ADMIN, body: JSON.stringify({ cacheKey: key, verdict: "correct" }) })).body;
-  check("the owner can override a verdict", ov.overridden === true);
+  const ov = (await call("/api/judge/override", { method: "POST", headers: ADMIN, body: JSON.stringify({ cacheKey: key, score: 88 }) })).body;
+  check("the owner can override a score", ov.overridden === true);
   const mine = (await call(`/api/attempts?challengeId=${encodeURIComponent(challenge.id)}&playerId=${p.playerId}`)).body;
-  check("the override rescored the existing attempt", mine.attempts[0].verdict === "correct" && mine.attempts[0].score === 100, JSON.stringify(mine.attempts[0]));
+  check("the override rescored the existing attempt", mine.attempts[0].score === 88, JSON.stringify(mine.attempts[0]));
   const next = (await play(await session(), "NEAR candle")).body;
-  check("the override is what everyone gets from now on", next.result.verdict === "correct" && next.result.cached === true);
+  check("the override is what everyone gets from now on", next.result.score === 88 && next.result.cached === true);
 }
 
 // === the retired bonus round ================================================

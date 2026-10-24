@@ -841,7 +841,7 @@ async function handlePlayJudged(env, ip, { playerId, name, answer, day, isLate, 
     return fail("junk_answer", verdict.hint, 400, env, { hint: verdict.hint });
   }
   const pending = verdict.verdict === PENDING;
-  const score = pending ? 0 : VERDICT_SCORE[verdict.verdict];
+  const score = pending ? 0 : verdict.score;
 
   let inserted = false;
   let attemptNumber = null;
@@ -953,10 +953,11 @@ async function handleAdmin(request, env, url) {
   }
   if (url.pathname === "/api/judge/override" && request.method === "POST") {
     const body = await request.json().catch(() => null);
-    if (!body?.cacheKey || !["correct", "close", "wrong"].includes(body.verdict)) {
-      return fail("bad_request", "cacheKey and verdict (correct|close|wrong) required.", 400, env);
+    const score = Number(body?.score);
+    if (!body?.cacheKey || !Number.isFinite(score) || score < 0 || score > 100) {
+      return fail("bad_request", "cacheKey and score (0 to 100) required.", 400, env);
     }
-    const ok = await overrideVerdict(env, { cacheKey: body.cacheKey, verdict: body.verdict, hint: body.hint ?? null });
+    const ok = await overrideVerdict(env, { cacheKey: body.cacheKey, score, hint: body.hint ?? null });
     return json({ overridden: ok }, { env });
   }
   if (url.pathname === "/api/judge/run" && request.method === "POST") {

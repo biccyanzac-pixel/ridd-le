@@ -19,8 +19,14 @@ import { judgeCacheKey, junkReason, normalizeForJudge } from "../../shared/judge
 import { JUDGE_PROMPT_VERSION, parseJudgeReply, responseSchema, systemPrompt, userPrompt } from "../../shared/judge-prompt.js";
 import PREWARM from "../../shared/prewarm.json";
 
+// Kept for the coarse bucket in logs; the score itself is 0 to 100 from
+// shared/clues.js scoreFrom and is what players see.
 export const VERDICT_SCORE = { correct: 100, close: 50, wrong: 0 };
 export const PENDING = "pending";
+
+function bucketOf(score) {
+  return score >= 70 ? "correct" : score >= 35 ? "close" : "wrong";
+}
 
 // Uncached model calls one address may trigger per hour. Cache hits and
 // junk cost nothing and are not counted.
@@ -55,9 +61,11 @@ const mock = {
       .toLowerCase()
       .replace(/^(a|an|the)\s+/, "")
       .split(/\s+/)[0];
+    // good: 95 on every clue; near: 20 on the first, 90 on the rest; else 10
+    // on every clue but 90 on specificity.
     const clues = ids.map((id, i) => ({
       id,
-      pass: first === "good" ? true : first === "near" ? i !== 0 : id === "specific",
+      score: first === "good" ? 95 : first === "near" ? (i === 0 ? 20 : 90) : id === "specific" ? 90 : 10,
       reason: "mock",
     }));
     return JSON.stringify({ clues });
@@ -239,16 +247,20 @@ async function ipAllowed(env, ip) {
 // --- cache -----------------------------------------------------------------------
 
 function served(row) {
-  if (!row) return null;
-  const verdict = row.override_verdict || row.verdict;
-  const hint = row.override_verdict ? row.override_hint : row.hint;
+  // A row judged before scores existed (prompt v1) is treated as a miss and
+  // re-judged; its old verdict is never served.
+  if (!row || row.score == null) return null;
+  const overridden = row.override_score != null;
+  const score = overridden ? row.override_score : row.score;
+  const hint = overridden ? row.override_hint : row.hint;
   return {
-    verdict,
-    hint: verdict === "correct" ? null : hint,
+    score,
+    verdict: bucketOf(score),
+    hint: hint ?? null,
     perClue: safeJson(row.per_clue),
     model: row.model,
     cacheKey: row.cache_key,
-    overridden: Boolean(row.override_verdict),
+    overridden,
   };
 }
 
@@ -266,24 +278,27 @@ export async function cachedVerdict(env, cacheKey) {
 }
 
 async function writeVerdict(env, { cacheKey, slug, normalized, result, model }) {
+  // A stale row from before scores existed makes way for the new one.
+  await env.DB.prepare(`DELETE FROM judge_verdicts WHERE cache_key = ? AND score IS NULL`).bind(cacheKey).run();
   // INSERT OR IGNORE then re-read: if two requests for a brand-new answer
   // race, the first verdict written is the one everybody gets.
   await env.DB.prepare(
     `INSERT OR IGNORE INTO judge_verdicts
-       (cache_key, slug, normalized_answer, verdict, hint, per_clue, model, prompt_version, clues_revision, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (cache_key, slug, normalized_answer, verdict, hint, per_clue, model, prompt_version, clues_revision, created_at, score)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       cacheKey,
       slug,
       normalized,
-      result.verdict,
+      bucketOf(result.score),
       result.hint,
       JSON.stringify(result.perClue ?? []),
       model,
       JUDGE_PROMPT_VERSION,
       CLUES_REVISION,
       new Date().toISOString(),
+      result.score,
     )
     .run();
   return cachedVerdict(env, cacheKey);
@@ -407,7 +422,7 @@ export async function enqueue(env, { cacheKey, slug, answer, submissionId }) {
 
 async function applyToSubmission(env, submissionId, verdict) {
   if (!submissionId) return;
-  const score = VERDICT_SCORE[verdict.verdict];
+  const score = verdict.score;
   await env.DB.prepare(
     `UPDATE submissions SET score = ?, noul = ?, verdict = ?, hint = ?, judged = 1 WHERE id = ? AND judged = 0`,
   )
@@ -492,18 +507,19 @@ export async function flagVerdict(env, cacheKey) {
   return (r?.meta?.changes ?? 0) > 0;
 }
 
-export async function overrideVerdict(env, { cacheKey, verdict, hint }) {
-  if (!VERDICT_SCORE.hasOwnProperty(verdict)) throw new Error("bad verdict");
+export async function overrideVerdict(env, { cacheKey, score, hint }) {
+  score = Number(score);
+  if (!Number.isFinite(score) || score < 0 || score > 100) throw new Error("bad score");
+  const verdict = bucketOf(score);
   const r = await env.DB.prepare(
-    `UPDATE judge_verdicts SET override_verdict = ?, override_hint = ?, override_at = ? WHERE cache_key = ?`,
+    `UPDATE judge_verdicts SET override_score = ?, override_verdict = ?, override_hint = ?, override_at = ? WHERE cache_key = ?`,
   )
-    .bind(verdict, hint ?? null, new Date().toISOString(), cacheKey)
+    .bind(score, verdict, hint ?? null, new Date().toISOString(), cacheKey)
     .run();
   if (!(r?.meta?.changes > 0)) return false;
   // Everyone who gave this answer gets the corrected score, past and future.
-  const score = VERDICT_SCORE[verdict];
   await env.DB.prepare(`UPDATE submissions SET score = ?, noul = ?, verdict = ?, hint = ? WHERE cache_key = ?`)
-    .bind(score, score / 100, verdict, verdict === "correct" ? null : hint ?? null, cacheKey)
+    .bind(score, score / 100, verdict, hint ?? null, cacheKey)
     .run();
   const row = await env.DB.prepare(`SELECT slug, normalized_answer FROM judge_verdicts WHERE cache_key = ?`)
     .bind(cacheKey)
@@ -526,7 +542,7 @@ export async function dailyLog(env, day) {
     env.DB.prepare(`SELECT slug, answer, normalized_answer, verdict, hint, source, model, latency_ms, created_at FROM judge_log WHERE day = ? ORDER BY created_at`)
       .bind(day)
       .all(),
-    env.DB.prepare(`SELECT cache_key, slug, normalized_answer, verdict, hint, flagged, override_verdict, model FROM judge_verdicts WHERE flagged > 0 ORDER BY flagged DESC`).all(),
+    env.DB.prepare(`SELECT cache_key, slug, normalized_answer, score, verdict, hint, flagged, override_score, override_verdict, model FROM judge_verdicts WHERE flagged > 0 ORDER BY flagged DESC`).all(),
     env.DB.prepare(`SELECT provider, calls FROM judge_quota WHERE day = ?`).bind(day).all(),
   ]);
   return { day, quota: quota.results ?? [], entries: entries.results ?? [], flagged: flagged.results ?? [] };
