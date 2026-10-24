@@ -14,7 +14,7 @@
  * log stores inputs and verdicts, never who sent them.
  */
 import { challengeForDay } from "../../shared/challenges.js";
-import { CLUES_REVISION } from "../../shared/clues.js";
+import { BONUS_PREFIX, CLUES_REVISION, FACETS } from "../../shared/clues.js";
 import { judgeCacheKey, junkReason, normalizeForJudge } from "../../shared/judge-normalize.js";
 import { JUDGE_PROMPT_VERSION, parseJudgeReply, responseSchema, systemPrompt, userPrompt } from "../../shared/judge-prompt.js";
 import PREWARM from "../../shared/prewarm.json";
@@ -69,9 +69,10 @@ const mock = {
       score: first === "good" ? 95 : first === "near" ? (i === 0 ? 20 : 90) : id === "specific" ? 90 : 10,
       reason: "mock",
     }));
-    // Overall rating: good 95, near 60, else 20 (see the test's expected scores).
-    const overall = first === "good" ? 95 : first === "near" ? 60 : 20;
-    return JSON.stringify({ clues, overall });
+    // Facets: good 95, near 60, else 20 on every facet (the tests derive the
+    // expected scores from these numbers with scoreFrom).
+    const facet = first === "good" ? 95 : first === "near" ? 60 : 20;
+    return JSON.stringify({ clues, ...Object.fromEntries(FACETS.map((f) => [f.id, facet])) });
   },
 };
 
@@ -480,7 +481,13 @@ export async function drainQueue(env, budget = QUEUE_BUDGET_PER_RUN) {
 function challengeBySlug(slug) {
   // challengeForDay resolves prompt/example by day; for a slug we need the
   // definition itself. CHALLENGES is exported from shared/challenges.js.
+  if (slug.startsWith(BONUS_PREFIX)) return bonusJudgeChallenge(slug.slice(BONUS_PREFIX.length));
   return CHALLENGE_INDEX.get(slug) ?? null;
+}
+
+/** What the judge sees for a bonus-round word. No example: there is none. */
+export function bonusJudgeChallenge(word) {
+  return { slug: `${BONUS_PREFIX}${String(word).toLowerCase()}`, prompt: `What's the opposite of "${word}"?`, example: null };
 }
 
 import { CHALLENGES } from "../../shared/challenges.js";

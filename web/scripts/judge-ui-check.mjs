@@ -14,6 +14,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright-core";
+import { FACETS, cluesFor, scoreFrom } from "../../shared/clues.js";
+import { challengeForDay, todayKey } from "../../shared/challenges.js";
+
+// The mock provider's numbers (worker/src/judge.js), run through scoreFrom.
+const slug = challengeForDay(todayKey()).slug;
+const facetsOf = (v) => Object.fromEntries(FACETS.map((f) => [f.id, v]));
+function expectedScore(kind) {
+  const clues = cluesFor(slug);
+  const ratings = clues.map((c, i) => (kind === "good" ? 95 : kind === "near" ? (i === 0 ? 20 : 90) : c.id === "specific" ? 90 : 10));
+  return scoreFrom(clues, ratings.map((score) => ({ score })), facetsOf(kind === "good" ? 95 : kind === "near" ? 60 : 20)).score;
+}
+const GOOD = expectedScore("good").toFixed(2);
+const NEAR = expectedScore("near").toFixed(2);
+const AVG2 = ((expectedScore("good") + expectedScore("near")) / 2).toFixed(1);
 
 const BASE = process.argv[2] || "http://localhost:5173";
 const OUT = process.argv[3] || path.join(process.cwd(), "judge-ui-shots");
@@ -57,16 +71,16 @@ async function submitAnswer(page, text) {
   await submitAnswer(page, "good lantern");
   await page.waitForSelector("#attempt-list .attempt-row");
   const first = await page.textContent("#attempt-list .attempt-row:nth-child(1) .attempt-score");
-  check("a strong answer shows its score", first?.trim() === "95.00", first);
+  check("a strong answer shows its score", first?.trim() === GOOD, `${first} vs ${GOOD}`);
   // The score counts up from the previous average; wait for it to settle.
-  await page.waitForFunction(() => document.querySelector("#daily-score")?.textContent.includes("95"), null, { timeout: 5000 }).catch(() => {});
-  check("the daily score shows 95", (await page.textContent("#daily-score"))?.includes("95"), await page.textContent("#daily-score"));
+  await page.waitForFunction((g) => document.querySelector("#daily-score")?.textContent.includes(g), GOOD, { timeout: 5000 }).catch(() => {});
+  check("the daily score shows the first attempt's score", (await page.textContent("#daily-score"))?.includes(GOOD), await page.textContent("#daily-score"));
   await page.screenshot({ path: path.join(OUT, "03-correct-360-dark.png") });
 
   await submitAnswer(page, "near lantern");
   const second = await page.textContent("#attempt-list .attempt-row:nth-child(2) .attempt-score");
   const hint = await page.textContent("#attempt-list .attempt-row:nth-child(2) .attempt-hint");
-  check("a near-miss shows a middling score with a hint", second?.trim() === "65.00" && hint?.startsWith("but"), `${second} / ${hint}`);
+  check("a near-miss shows a middling score with a hint", second?.trim() === NEAR && hint?.startsWith("but"), `${second} / ${hint}`);
   const flag = page.locator("#attempt-list .attempt-row:nth-child(2) .attempt-flag");
   check("an 'Unfair score?' button is offered", (await flag.count()) === 1);
   await flag.click();
@@ -78,10 +92,10 @@ async function submitAnswer(page, text) {
   const third = await page.textContent("#attempt-list .attempt-row:nth-child(3) .attempt-score");
   check("a paused answer shows 'Judging paused', not an error", third?.trim() === "Judging paused" && await page.isHidden("#error"), third);
   check("the caption says one attempt is still to be scored", (await page.textContent("#daily-score-caption"))?.includes("paused"));
-  await page.waitForFunction(() => document.querySelector("#daily-score")?.textContent.includes("80.0"), null, { timeout: 5000 }).catch(() => {});
-  check("a pending attempt is left out of the average (80, not 53.33)", (await page.textContent("#daily-score"))?.includes("80.0"), await page.textContent("#daily-score"));
+  await page.waitForFunction((a) => document.querySelector("#daily-score")?.textContent.includes(a), AVG2, { timeout: 5000 }).catch(() => {});
+  check("a pending attempt is left out of the average", (await page.textContent("#daily-score"))?.includes(AVG2), `${await page.textContent("#daily-score")} vs ${AVG2}`);
   check("the game is finished: form gone, done note shown", await page.isHidden("#play") && await page.isVisible("#attempts-done"));
-  check("the bonus round is not offered", await page.isHidden("#bonus") && await page.isHidden("#play-bonus-button"));
+  check("the bonus round is offered once the riddle is done", await page.isVisible("#bonus"));
   await page.screenshot({ path: path.join(OUT, "05-paused-finished-360-dark.png"), fullPage: true });
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   check("no horizontal scroll at 390 px", width <= 390, String(width));

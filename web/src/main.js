@@ -483,7 +483,7 @@ function renderNameField() {
 /** The inline nudge next to the riddle, alongside (not instead of) the
  * always-visible locked bonus panel further down the page. */
 function updateBonusTeaser() {
-  el.bonusTeaser.hidden = SERVER_JUDGED || !leaderboardEnabled() || hasCompletedToday();
+  el.bonusTeaser.hidden = !leaderboardEnabled() || hasCompletedToday();
 }
 
 // What the attempts panel last showed, so a newly landed attempt can animate
@@ -559,7 +559,7 @@ function renderAttempts({ landed = false } = {}) {
  * is still a guess left to make: shown once today's riddle is finished, gone
  * again once all 3 bonus guesses are used. */
 function updatePlayBonusButton(animate = false) {
-  const show = !SERVER_JUDGED && hasCompletedToday() && leaderboardEnabled() && !hasCompletedBonus();
+  const show = hasCompletedToday() && leaderboardEnabled() && !hasCompletedBonus();
   if (show) showEl(el.playBonusButton, animate);
   else el.playBonusButton.hidden = true;
 }
@@ -1184,8 +1184,7 @@ let bonusInitialized = false;
 let booted = false; // set once the page's first render is done
 
 async function initBonusIfUnlocked() {
-  // The bonus round was scored by the in-browser model, which v6 retires.
-  if (SERVER_JUDGED || !leaderboardEnabled()) {
+  if (!leaderboardEnabled()) {
     el.bonus.hidden = true;
     return;
   }
@@ -1249,11 +1248,15 @@ el.bonusPlay.addEventListener("submit", async (event) => {
   el.bonusSubmit.disabled = true;
   el.bonusSubmit.classList.add("busy");
   el.bonusSubmitLabel.textContent =
-    judgeRuntime()?.device === "server-wasm" ? "Checking your guess…" : "Judging…";
+    SERVER_JUDGED || judgeRuntime()?.device === "server-wasm" ? "Checking your guess…" : "Judging…";
 
   try {
-    await loadJudge();
-    const verdict = await scoreAnswer({ answer, statement: bonusChallenge.noulStatement });
+    // From v6 the worker judges the bonus round too; before, the browser did.
+    let verdict = null;
+    if (!SERVER_JUDGED) {
+      await loadJudge();
+      verdict = await scoreAnswer({ answer, statement: bonusChallenge.noulStatement });
+    }
 
     const normalized = normalizeAnswer(answer);
     const hash = await answerHash({
@@ -1272,9 +1275,7 @@ el.bonusPlay.addEventListener("submit", async (event) => {
       answer,
       normalizedAnswer: normalized,
       answerHash: hash,
-      noul: verdict.noul,
-      score: verdict.score,
-      model: verdict.model,
+      ...(verdict ? { noul: verdict.noul, score: verdict.score, model: verdict.model } : {}),
     });
 
     if (Array.isArray(response?.attempts)) bonusAttemptsList = response.attempts;
@@ -1296,6 +1297,8 @@ el.bonusPlay.addEventListener("submit", async (event) => {
       showBonusError("You've already guessed that.");
     } else if (err.status === 403 && err.body?.error === "bonus_locked") {
       showBonusError("Finish today's riddle first to unlock the bonus round.");
+    } else if (err.status === 400 && err.body?.error === "junk_answer") {
+      showBonusError(err.body.hint || err.message);
     } else {
       showBonusError(err?.message || "Something went wrong scoring that. Try again.");
     }

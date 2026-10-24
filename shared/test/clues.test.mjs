@@ -76,16 +76,19 @@ check("result count must match clue count", (() => { try { verdictFrom(clues, r(
 
 // --- 0 to 100 scoring --------------------------------------------------------
 const rate = (...scores) => scores.map((score) => ({ score }));
-check("all 100 scores 100", scoreFrom(clues, rate(100, 100, 100, 100)).score === 100);
-check("all 0 scores 0 with the first clue's hint", scoreFrom(clues, rate(0, 0, 0, 0)).score === 0 && scoreFrom(clues, rate(0, 0, 0, 0)).hint === "hint a");
-check("soft clues count half", Math.abs(scoreFrom(clues, rate(100, 100, 0, 100)).score - 85.71) < 0.01);
+// Weights: a 1, b 1, s 0.5, specific 1, prior 0.4 at 50 => denominator 3.9.
+check("all 100 stays under 100 (shrunk towards 50)", Math.abs(scoreFrom(clues, rate(100, 100, 100, 100)).score - (350 + 20) / 3.9) < 0.01);
+check("all 0 is pulled up a little, with the first clue's hint", Math.abs(scoreFrom(clues, rate(0, 0, 0, 0)).score - 20 / 3.9) < 0.01 && scoreFrom(clues, rate(0, 0, 0, 0)).hint === "hint a");
+check("soft clues count half", Math.abs(scoreFrom(clues, rate(100, 100, 0, 100)).score - (300 + 20) / 3.9) < 0.01);
 check("the hint is the weakest clue when it rates under 60", scoreFrom(clues, rate(90, 50, 80, 95)).hint === "hint b");
 check("no hint when every clue rates 60 or more", scoreFrom(clues, rate(90, 60, 80, 95)).hint === null);
 check("ratings are clamped to 0..100", scoreFrom(clues, rate(150, -20, 100, 100)).score <= 100);
-check("buckets: 70+ correct, 35+ close, else wrong", scoreFrom(clues, rate(70, 70, 70, 70)).bucket === "correct" && scoreFrom(clues, rate(40, 40, 40, 40)).bucket === "close" && scoreFrom(clues, rate(10, 10, 10, 10)).bucket === "wrong");
+check("buckets: 70+ correct, 35+ close, else wrong", scoreFrom(clues, rate(85, 85, 85, 85)).bucket === "correct" && scoreFrom(clues, rate(40, 40, 40, 40)).bucket === "close" && scoreFrom(clues, rate(10, 10, 10, 10)).bucket === "wrong");
 check("rating count must match clue count", (() => { try { scoreFrom(clues, rate(1)); return false; } catch { return true; } })());
-check("an overall rating counts as one more full-weight rating", Math.abs(scoreFrom(clues, rate(100, 100, 100, 100), 65).score - 92.22) < 0.01);
-check("no overall rating changes nothing", scoreFrom(clues, rate(80, 80, 80, 80), null).score === 80);
+check("the overall facet counts as one more full-weight rating", Math.abs(scoreFrom(clues, rate(100, 100, 100, 100), 65).score - (350 + 65 + 20) / 4.9) < 0.01);
+check("all four facets weigh 1, 0.5, 0.5, 0.25", Math.abs(scoreFrom(clues, rate(80, 80, 80, 80), { overall: 80, precision: 80, wit: 80, natural: 80 }).score - (280 + 80 + 40 + 40 + 20 + 20) / 6.15) < 0.01);
+check("no facets changes nothing but the prior", Math.abs(scoreFrom(clues, rate(80, 80, 80, 80), null).score - (280 + 20) / 3.9) < 0.01);
+check("bonus clues come from the word", cluesFor("bonus-opposite/warm").some((c) => c.id === "opposite" && c.q.includes("warm")));
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CLUE CHECKS PASSED");
 process.exit(failures ? 1 : 0);
