@@ -134,3 +134,16 @@ export async function submit(payload) {
     body: JSON.stringify({ ...payload, playerId, token }),
   });
 }
+
+/**
+ * "Wrong verdict?" (scoring v6): flags the cached verdict behind one of this
+ * player's own answers for the owner's daily review. The worker checks the
+ * answer really is this player's before counting the flag.
+ */
+export async function flagVerdict(cacheKey) {
+  const { playerId, token } = await session();
+  return call("/api/judge/flag", {
+    method: "POST",
+    body: JSON.stringify({ cacheKey, playerId, token }),
+  });
+}

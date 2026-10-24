@@ -978,3 +978,46 @@ textarea:focus-visible,
     opacity: 0.85;
   }
 }
+
+/* --- verdicts (scoring v6) ------------------------------------------------ */
+
+.attempt-score.pending {
+  color: var(--warn, #c77b2b);
+  font-size: 0.9rem;
+}
+
+.attempt-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.attempt-flag {
+  margin: 0.45rem 0 0;
+  padding: 0.2rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color var(--jgg-t-hover, 150ms) ease, border-color var(--jgg-t-hover, 150ms) ease,
+    transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, ease-out);
+}
+
+.attempt-flag:active {
+  transform: scale(0.97);
+}
+
+.attempt-flag:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .attempt-flag:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--text);
+  }
+}

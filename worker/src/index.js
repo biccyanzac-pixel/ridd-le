@@ -45,16 +45,40 @@
  * trade-off for a free, local-inference game - see README.md.
  */
 
+import { challengeForDay } from "../../shared/challenges.js";
+import {
+  PENDING,
+  VERDICT_SCORE,
+  dailyLog,
+  drainQueue,
+  enqueue,
+  flagVerdict,
+  judgeAnswer,
+  overrideVerdict,
+  prewarm,
+  weeklySummary,
+} from "./judge.js";
+
 // Main-riddle scoring versions, by the UTC day they take effect - must stay
 // byte-identical in dates and versions to shared/challenges.js's
-// SCORING_VERSIONS. v5 scores with two model calls in the browser rather
+// SCORING_VERSIONS. v6: the worker judges (src/judge.js) and the browser
+// runs no model; the score is 100 / 50 / 0 for correct / close / wrong. v5 scores with two model calls in the browser rather
 // than one; the worker never judges, so all it needs is the version that
 // forms the day's challenge id and goes into the answer hash. A past day
 // keeps the version it was played under, so its leaderboard stays reachable.
 const SCORING_VERSIONS = [
+  { from: "2026-10-24", version: 6 },
   { from: "2026-10-05", version: 5 },
   { from: "0000-01-01", version: 4 },
 ];
+
+// Local testing only: `--var SCORING_V6_FROM:<day>` moves the v6 switch so
+// the judged path can be exercised before its date. Never set in production.
+function applyEnvOverrides(env) {
+  if (env?.SCORING_V6_FROM && /^\d{4}-\d{2}-\d{2}$/.test(env.SCORING_V6_FROM)) {
+    SCORING_VERSIONS[0].from = env.SCORING_V6_FROM;
+  }
+}
 
 function scoringVersionForDay(dayKey) {
   return (
@@ -298,18 +322,20 @@ function json(body, { status = 200, env } = {}) {
   });
 }
 
-function fail(code, message, status, env) {
-  return json({ error: code, message }, { status, env });
+function fail(code, message, status, env, extra = {}) {
+  return json({ error: code, message, ...extra }, { status, env });
 }
 
 // --- rate limiting (in-memory per isolate; good enough to blunt a burst) --
 
 const hits = new Map();
-function rateLimited(ip) {
+function rateLimited(ip, env) {
   const now = Date.now();
   const windowMs = 60 * 60 * 1000;
+  // Submissions per address per hour. Overridable for local tests only.
+  const limit = Number(env?.PLAY_HOURLY_LIMIT) || 30;
   const recent = (hits.get(ip) ?? []).filter((t) => now - t < windowMs);
-  if (recent.length >= 30) {
+  if (recent.length >= limit) {
     hits.set(ip, recent);
     return true;
   }
@@ -348,6 +374,11 @@ function attemptView(row) {
     answer: row.original_answer,
     score: row.score,
     at: row.submitted_at,
+    // v6 fields; null on older rows.
+    verdict: row.judged === 0 ? PENDING : row.verdict ?? null,
+    hint: row.hint ?? null,
+    cacheKey: row.cache_key ?? null,
+    pending: row.judged === 0,
   };
 }
 
@@ -363,7 +394,7 @@ async function countAttempts(env, challId, playerId) {
 
 async function fetchPlayerAttempts(env, challId, playerId) {
   const { results } = await env.DB.prepare(
-    `SELECT attempt_number, original_answer, score, submitted_at
+    `SELECT attempt_number, original_answer, score, submitted_at, verdict, hint, cache_key, judged
        FROM submissions
       WHERE challenge_id = ? AND player_id = ?
       ORDER BY attempt_number ASC`,
@@ -425,7 +456,7 @@ function boardRow(player, rank, playerId, redact) {
  */
 async function fetchBoard(env, challId, playerId, lateOnly = false) {
   const { results } = await env.DB.prepare(
-    `SELECT player_id, display_name, attempt_number, original_answer, score, submitted_at, id
+    `SELECT player_id, display_name, attempt_number, original_answer, score, submitted_at, id, verdict, judged
        FROM submissions
       WHERE challenge_id = ? AND is_late = ?
       ORDER BY player_id, attempt_number ASC`,
@@ -447,17 +478,28 @@ async function fetchBoard(env, challId, playerId, lateOnly = false) {
     // sequentially and the unique index on (player_id, challenge_id,
     // attempt_number) makes a duplicate or skipped number impossible), so
     // this can never accumulate a fake or out-of-range third attempt.
-    p.attempts.push({ attemptNumber: row.attempt_number, answer: row.original_answer, score: row.score });
+    p.attempts.push({
+      attemptNumber: row.attempt_number,
+      answer: row.original_answer,
+      score: row.score,
+      verdict: row.judged === 0 ? PENDING : row.verdict ?? null,
+      pending: row.judged === 0,
+    });
     if (!p.firstSubmittedAt) {
       p.firstSubmittedAt = row.submitted_at;
       p.firstId = row.id;
     }
   }
 
-  const perPlayer = [...byPlayer.values()].map((p) => ({
-    ...p,
-    avgScore: p.attempts.reduce((sum, a) => sum + a.score, 0) / p.attempts.length,
-  }));
+  // The daily score averages the attempts that have been judged; an attempt
+  // accepted while judging was paused (v6) joins the average once scored.
+  const perPlayer = [...byPlayer.values()].map((p) => {
+    const judged = p.attempts.filter((a) => !a.pending);
+    return {
+      ...p,
+      avgScore: judged.length ? judged.reduce((sum, a) => sum + a.score, 0) / judged.length : 0,
+    };
+  });
   perPlayer.sort(
     (a, b) =>
       b.avgScore - a.avgScore ||
@@ -506,7 +548,7 @@ async function handleAttempts(request, env) {
 }
 
 async function handlePlay(request, env, ip) {
-  if (rateLimited(ip)) {
+  if (rateLimited(ip, env)) {
     return fail("rate_limited", "Too many submissions from here. Try again later.", 429, env);
   }
 
@@ -568,6 +610,11 @@ async function handlePlay(request, env, ip) {
   // mismatch here would reject every submission for that day.
   const scoringVersion = kind === "main" ? scoringVersionForDay(day) : bonusVersionForDay(day);
 
+  if (kind === "bonus" && scoringVersionForDay(day) >= 6) {
+    // The bonus round was judged by the browser model, which v6 retires.
+    return fail("bonus_retired", "The bonus round has finished its run.", 410, env);
+  }
+
   if (kind === "bonus") {
     // The bonus round has no archive/replay - it only ever exists for
     // today, unlocked only after today's main riddle is finished. Checked
@@ -593,6 +640,18 @@ async function handlePlay(request, env, ip) {
   const answer = validateAnswer(body.answer);
   if (!answer) return fail("bad_answer", "Write an answer first.", 400, env);
 
+  if (kind === "main" && scoringVersion >= 6) {
+    return handlePlayJudged(env, ip, {
+      playerId,
+      name,
+      answer,
+      day,
+      isLate,
+      expectedChallengeId,
+      scoringVersion,
+      answerHash: body.answerHash,
+    });
+  }
   // The noul itself cannot be re-verified without running the model here,
   // which would defeat the point of free client-side inference - but its
   // SHAPE and its relationship to the score can be, and are:
@@ -697,8 +756,8 @@ async function handlePlay(request, env, ip) {
         `INSERT INTO submissions
            (id, player_id, challenge_id, day_key, scoring_version, attempt_number,
             display_name, original_answer, normalized_answer, answer_hash, noul, score,
-            model, submitted_at, is_late)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            model, submitted_at, is_late, verdict, hint, cache_key, judged)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)`,
       )
         .bind(
           uuid(),
@@ -750,8 +809,198 @@ async function handlePlay(request, env, ip) {
   );
 }
 
+/**
+ * v6: the worker judges. Junk is refused without costing an attempt; a
+ * duplicate is refused as before; everything else is judged (cache first)
+ * and recorded with its verdict. If judging is paused the attempt is still
+ * recorded, as pending, and the cron scores it later.
+ */
+async function handlePlayJudged(env, ip, { playerId, name, answer, day, isLate, expectedChallengeId, scoringVersion, answerHash: sentHash }) {
+  const normalized = normalizeAnswer(answer);
+  const expectedHash = await answerHash({ challengeId: expectedChallengeId, scoringVersion, normalizedAnswer: normalized });
+  if (sentHash !== expectedHash) {
+    return fail("hash_mismatch", "Answer data did not match. Try submitting again.", 400, env);
+  }
+
+  const duplicate = await env.DB.prepare(
+    `SELECT 1 FROM submissions WHERE player_id = ? AND challenge_id = ? AND normalized_answer = ? LIMIT 1`,
+  )
+    .bind(playerId, expectedChallengeId, normalized)
+    .first();
+  if (duplicate) return fail("duplicate_answer", "You've already submitted that answer.", 409, env);
+
+  const full = `All ${MAX_ATTEMPTS} attempts are already used for ${isLate ? "that day" : "today"}.`;
+  if ((await countAttempts(env, expectedChallengeId, playerId)) >= MAX_ATTEMPTS) {
+    return fail("max_attempts", full, 409, env);
+  }
+
+  const challenge = challengeForDay(day);
+  const verdict = await judgeAnswer(env, { challenge, answer, ip, day: todayKey() });
+  if (verdict.source === "junk") {
+    // Not an attempt: the player is told what's missing and keeps the slot.
+    return fail("junk_answer", verdict.hint, 400, env, { hint: verdict.hint });
+  }
+  const pending = verdict.verdict === PENDING;
+  const score = pending ? 0 : VERDICT_SCORE[verdict.verdict];
+
+  let inserted = false;
+  let attemptNumber = null;
+  let submissionId = null;
+  for (let tries = 0; tries < 3 && !inserted; tries += 1) {
+    const count = await countAttempts(env, expectedChallengeId, playerId);
+    if (count >= MAX_ATTEMPTS) return fail("max_attempts", full, 409, env);
+    attemptNumber = count + 1;
+    submissionId = uuid();
+    try {
+      await env.DB.prepare(
+        `INSERT INTO submissions
+           (id, player_id, challenge_id, day_key, scoring_version, attempt_number,
+            display_name, original_answer, normalized_answer, answer_hash, noul, score,
+            model, submitted_at, is_late, verdict, hint, cache_key, judged)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          submissionId,
+          playerId,
+          expectedChallengeId,
+          day,
+          scoringVersion,
+          attemptNumber,
+          name,
+          answer,
+          normalized,
+          expectedHash,
+          score / 100,
+          score,
+          verdict.model ?? "pending",
+          new Date().toISOString(),
+          isLate ? 1 : 0,
+          pending ? null : verdict.verdict,
+          pending ? null : verdict.hint,
+          verdict.cacheKey,
+          pending ? 0 : 1,
+        )
+        .run();
+      inserted = true;
+    } catch (err) {
+      if (!String(err.message || err).includes("UNIQUE")) throw err;
+    }
+  }
+  if (!inserted) return fail("max_attempts", full, 409, env);
+
+  if (pending) {
+    await enqueue(env, { cacheKey: verdict.cacheKey, slug: challenge.slug, answer, submissionId });
+  }
+
+  const [board, playerAttempts] = await Promise.all([
+    fetchBoard(env, expectedChallengeId, playerId, isLate),
+    fetchPlayerAttempts(env, expectedChallengeId, playerId),
+  ]);
+  return json(
+    {
+      result: {
+        answer,
+        verdict: verdict.verdict,
+        hint: pending ? null : verdict.hint,
+        score,
+        attemptNumber,
+        late: isLate,
+        pending,
+        cacheKey: verdict.cacheKey,
+        cached: verdict.source === "cache",
+      },
+      attempts: playerAttempts,
+      leaderboard: board,
+    },
+    { env },
+  );
+}
+
+function isAdmin(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  return Boolean(env.JUDGE_ADMIN_TOKEN) && auth === `Bearer ${env.JUDGE_ADMIN_TOKEN}`;
+}
+
+async function handleFlag(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return fail("bad_request", "Invalid JSON.", 400, env);
+  }
+  const { playerId, token, cacheKey } = body ?? {};
+  if (!(await verifyPlayer(env, playerId, token))) return fail("bad_session", "Reload the page.", 401, env);
+  if (typeof cacheKey !== "string" || cacheKey.length > 200) return fail("bad_request", "Bad key.", 400, env);
+  // Only an answer this player actually gave can be flagged.
+  const own = await env.DB.prepare(`SELECT 1 FROM submissions WHERE player_id = ? AND cache_key = ? LIMIT 1`)
+    .bind(playerId, cacheKey)
+    .first();
+  if (!own) return fail("not_yours", "That isn't one of your answers.", 403, env);
+  return json({ flagged: await flagVerdict(env, cacheKey) }, { env });
+}
+
+async function handleAdmin(request, env, url) {
+  if (!isAdmin(request, env)) return fail("forbidden", "Admin token required.", 403, env);
+  if (url.pathname === "/api/judge/log") {
+    const day = url.searchParams.get("day") || todayKey();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return fail("bad_day", "Invalid day.", 400, env);
+    return json(await dailyLog(env, day), { env });
+  }
+  if (url.pathname === "/api/judge/summary") {
+    const to = url.searchParams.get("to") || todayKey();
+    const days = Math.min(31, Math.max(1, Number(url.searchParams.get("days")) || 7));
+    return json(await weeklySummary(env, to, days), { env });
+  }
+  if (url.pathname === "/api/judge/override" && request.method === "POST") {
+    const body = await request.json().catch(() => null);
+    if (!body?.cacheKey || !["correct", "close", "wrong"].includes(body.verdict)) {
+      return fail("bad_request", "cacheKey and verdict (correct|close|wrong) required.", 400, env);
+    }
+    const ok = await overrideVerdict(env, { cacheKey: body.cacheKey, verdict: body.verdict, hint: body.hint ?? null });
+    return json({ overridden: ok }, { env });
+  }
+  if (url.pathname === "/api/judge/run" && request.method === "POST") {
+    // Manual nudge of what the cron does; handy right after a deploy.
+    return json(await scheduledWork(env), { env });
+  }
+  return fail("not_found", "No such endpoint.", 404, env);
+}
+
+/** The cron's work: score queued answers, then warm today's and tomorrow's riddles. */
+async function scheduledWork(env) {
+  applyEnvOverrides(env);
+  const out = { drained: 0, warmedToday: 0, warmedTomorrow: 0 };
+  try {
+    out.drained = await drainQueue(env);
+  } catch (err) {
+    console.error("drainQueue", err);
+  }
+  const today = todayKey();
+  if (scoringVersionForDay(today) >= 6) {
+    try {
+      out.warmedToday = await prewarm(env, today);
+    } catch (err) {
+      console.error("prewarm today", err);
+    }
+  }
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  if (new Date().getUTCHours() >= 18 && scoringVersionForDay(tomorrow) >= 6) {
+    try {
+      out.warmedTomorrow = await prewarm(env, tomorrow);
+    } catch (err) {
+      console.error("prewarm tomorrow", err);
+    }
+  }
+  return out;
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(scheduledWork(env));
+  },
+
   async fetch(request, env) {
+    applyEnvOverrides(env);
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
@@ -771,6 +1020,12 @@ export default {
       if (url.pathname === "/api/play" && request.method === "POST") {
         const ip = request.headers.get("CF-Connecting-IP") || "unknown";
         return await handlePlay(request, env, ip);
+      }
+      if (url.pathname === "/api/judge/flag" && request.method === "POST") {
+        return await handleFlag(request, env);
+      }
+      if (url.pathname.startsWith("/api/judge/")) {
+        return await handleAdmin(request, env, url);
       }
       return fail("not_found", "No such endpoint.", 404, env);
     } catch (err) {

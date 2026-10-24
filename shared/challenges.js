@@ -473,6 +473,18 @@ export function challengeId(slug, scoringVersion, dayKey) {
  * still exactly noul * 100 and the worker's existing checks hold unchanged.
  */
 const SCORING_VERSIONS = [
+  // v6: the worker judges every answer against the riddle's clue checklist
+  // (shared/clues.js) with a hosted model, caches the verdict per normalised
+  // answer, and the browser runs no model at all. An attempt scores 100 for
+  // correct, 50 for close, 0 for wrong (see VERDICT_SCORE). The statements
+  // are null: nothing is asked of a model in the browser from this day.
+  {
+    from: "2026-10-24",
+    version: 6,
+    statement: () => null,
+    penaltyStatement: null,
+    penaltyExponent: 0,
+  },
   {
     from: "2026-10-05",
     version: 5,
@@ -525,6 +537,14 @@ export function scoringVersionForDay(dayKey) {
 export function combineNoul(quality, penalty, exponent) {
   if (!exponent) return assertNoul(quality);
   return assertNoul(assertNoul(quality) * (1 - assertNoul(penalty)) ** exponent);
+}
+
+/** Score for a v6 verdict. Mirrored in worker/src/judge.js. */
+export const VERDICT_SCORE = { correct: 100, close: 50, wrong: 0 };
+
+/** From v6 the server judges; the browser never loads a model. */
+export function serverJudged(scoringVersion) {
+  return scoringVersion >= 6;
 }
 
 export function challengeForDay(dayKey = todayKey()) {

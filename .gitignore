@@ -39,3 +39,12 @@ worker/seed.local.sql
 
 # Benchmark score dumps - local measurement data, regenerable
 web/*-scores.json
+
+# Judge evaluation raw model replies (regenerable, large)
+tools/judge-eval/results/raw/
+
+# Local wrangler state of the eval proxy
+tools/judge-eval/cf-proxy/.wrangler/
+
+# Owner judge logs pulled from the worker
+logs/

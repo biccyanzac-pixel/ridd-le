@@ -1,0 +1,11 @@
+# Evaluation-only proxy so the eval harness (plain Node) can call Workers AI
+# through the same binding the production worker uses. Never deployed: run
+# with `npx wrangler dev --port 8790` from this folder. wrangler dev proxies
+# the AI binding to the real account, so calls spend the account's free
+# daily neurons exactly as production will.
+name = "ridd-le-judge-eval-proxy"
+main = "index.js"
+compatibility_date = "2026-09-01"
+
+[ai]
+binding = "AI"

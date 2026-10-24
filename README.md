@@ -3,10 +3,48 @@
 **▶ [Play today's riddle](https://biccyanzac-pixel.github.io/ridd-le/)**
 
 A daily riddle with deliberately no official answer. You propose an
-interpretation, a language model judges whether it makes the riddle true, and
-the leaderboard discovers the strongest readings after the fact.
+interpretation, a judge checks it against the riddle's clues, and the
+leaderboard discovers the strongest readings after the fact.
 
-Three things define it:
+## How it's judged (from 24 October 2026, scoring v6)
+
+Every riddle has a short **clue checklist** (`shared/clues.js`): each half of
+its contradiction as a yes/no question about the answer, plus one implicit
+clue that rejects vague categories and restatements. Any answer that satisfies
+every clue is correct; the example shown in the box is one example, never the
+key. The worker asks a hosted model one yes/no per clue and derives the verdict
+itself: **correct** (every required clue passes), **close** (exactly one
+fails; the hint is that clue rephrased, "but can it open a lock?"), otherwise
+**wrong**. Correct scores 100, close 50, wrong 0, and the day is still the
+average of three attempts.
+
+- **Judged once, forever.** The verdict for a (riddle, normalised answer) pair
+  is cached in D1 before the player sees it, so "The hedges" and "hedge" get
+  one verdict and the model is never asked twice. `worker/test/judge.e2e.mjs`
+  proves 100 requests with 20 distinct answers reach the model 20 times.
+- **Free.** Workers AI on the Workers Free plan is the primary judge, Groq's
+  free tier the backup (`docs/judge-eval.md` has the measurements and limits).
+  Quota counters per provider per day switch to the backup at 80% and pause
+  judging at 100% of both; a per-address hourly limit stops one player draining
+  it. The cron pre-judges the likely answers for the next riddle each evening.
+- **Never an error.** While judging is paused an answer is accepted as pending,
+  queued, and scored by the cron when quota returns; the player sees "judging
+  paused" and their result on their next visit. No other model ever judges
+  live, so a verdict never depends on when you played.
+- **Junk is free.** Empty, over six words, or the riddle's own words with
+  nothing added are refused with a fixed hint and don't cost an attempt.
+- **Flags and overrides.** "Wrong verdict?" under an attempt flags its cached
+  verdict for the owner's daily log; an owner override replaces it for everyone
+  who gave that answer. `tools/judge-eval/pull-log.mjs` pulls the daily file
+  and the weekly summary (calls, cache hit rate, paused minutes, common "close"
+  answers).
+
+Only the riddle, its clues, the example and the answer go to a model. No
+player identifiers are sent or logged.
+
+The section below describes v1 to v5, which days before 24 October keep.
+
+Three things defined it:
 
 1. **The score is a probability, not an opinion.** The judge is asked yes/no
    questions and returns probabilities; the score is a probability × 100, at
@@ -106,7 +144,9 @@ so evaluations never carry across a bump — a bump starts a fresh board rather
 than silently mixing incomparable numbers.
 
 v1 hosted judge · v2 in-browser open weights · v3 full-precision scores and
-three attempts · **v4** open-ended riddles, daily score becomes the average.
+three attempts · v4 open-ended riddles, daily score becomes the average ·
+v5 two questions in the browser · **v6** the worker judges against clue
+checklists, verdicts cached; the bonus round retires.
 
 ## Running it locally
 
@@ -137,12 +177,23 @@ instead, so production is unaffected.
 
 ### Deploying
 
-Order matters. The worker's insert references a column that a migration adds,
+Order matters. The worker's insert references columns that migrations add,
 so a worker deployed ahead of its migration breaks every submission:
 
 1. `cd worker && npx wrangler d1 execute jacob-gg-leaderboard --remote --file=migrations/<n>.sql`
-2. `cd worker && npm run deploy`
-3. push to `main` — `web/**` or `shared/**` changes trigger the Pages build
+   (0001 and 0002 so far; `CREATE TABLE IF NOT EXISTS` parts are safe to re-run,
+   the `ALTER TABLE` lines are not, so run each migration once)
+2. Secrets the judge needs, once: `npx wrangler secret put GROQ_API_KEY` and
+   `npx wrangler secret put JUDGE_ADMIN_TOKEN` (any long random string; it is
+   what `tools/judge-eval/pull-log.mjs` and overrides use)
+3. `cd worker && npm run deploy`
+4. push to `main` — `web/**` or `shared/**` changes trigger the Pages build
+5. `curl -X POST <worker>/api/judge/run -H "Authorization: Bearer <token>"`
+   kicks the cron's work once (queue, then pre-warming today's and tomorrow's
+   riddle), and `tools/judge-eval/pull-log.mjs` shows what it did.
+
+The v6 start date is in two places that must agree: `SCORING_VERSIONS` in
+`shared/challenges.js` and in `worker/src/index.js`.
 
 ## Known limitations
 
@@ -183,7 +234,10 @@ Honest list; none of these are secretly handled.
 | `web/` | The game. Vite + the in-browser judge. Deployed to Pages. |
 | `worker/` | Leaderboard API. Cloudflare Worker + D1, with `schema.sql` and `migrations/`. |
 | `shared/` | Challenge rotation, answer normalisation, hashing — read by both sides. |
-| `web/scripts/riddle-bench/` | The measurements behind the judge's question phrasing. |
+| `shared/clues.js`, `shared/judge-normalize.js`, `shared/judge-prompt.js`, `shared/prewarm.json` | The clue checklists, the normaliser and junk filter, the judge prompt and parser, the likely answers to pre-judge. |
+| `worker/src/judge.js` | Cache, quota, per-address limit, providers, queue, pre-warming, log, flags and overrides. |
+| `tools/judge-eval/` | The labelled 600-pair test set, provider adapters, metrics runner (`docs/judge-eval.md`), pre-warm generator and the owner's log puller. |
+| `web/scripts/riddle-bench/` | The measurements behind the v4/v5 question phrasing (historical). |
 | `server.js`, `lib/`, `start-game.cmd` | Legacy v1: a local Express + SQLite server from before scoring moved into the browser. Not deployed, not how the game runs now. |
 
 ## Credits
