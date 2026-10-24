@@ -78,7 +78,7 @@ function openaiStyle(name, url, keyName, model, extra = {}) {
         {
           model,
           temperature: 0,
-          max_tokens: 400,
+          max_tokens: 1500,
           messages: [
             { role: "system", content: system },
             { role: "user", content: user },

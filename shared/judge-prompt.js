@@ -99,18 +99,27 @@ export function parseJudgeReply(slug, text) {
   for (const item of list) {
     if (item && typeof item.id === "string") byId.set(item.id, item);
   }
+  // A reply cut short by a token limit can still be valid JSON (Groq's JSON
+  // mode closes it), with clues missing. That is not a score, it is a
+  // failed call: throw, so the caller retries instead of caching zeros.
+  const missing = clues.filter((c) => !byId.has(c.id)).map((c) => c.id);
+  if (missing.length) throw new Error(`judge reply was incomplete: no rating for ${missing.join(", ")}`);
   const perClue = clues.map((c) => {
     const item = byId.get(c.id);
     let score = Number(item?.score);
     if (!Number.isFinite(score)) {
-      const pass = typeof item?.pass === "boolean" ? item.pass : String(item?.pass).toLowerCase() === "yes";
-      score = item ? (pass ? 100 : 0) : 0;
+      if (typeof item?.pass !== "boolean" && item?.pass == null) {
+        throw new Error(`judge reply was incomplete: no score for ${c.id}`);
+      }
+      const pass = typeof item.pass === "boolean" ? item.pass : String(item.pass).toLowerCase() === "yes";
+      score = pass ? 100 : 0;
     }
     score = Math.min(100, Math.max(0, Math.round(score)));
     return { id: c.id, score, reason: String(item?.reason ?? "").slice(0, 160) };
   });
   const overallRaw = Number(parsed?.overall);
-  const overall = Number.isFinite(overallRaw) ? Math.min(100, Math.max(0, Math.round(overallRaw))) : null;
+  if (!Number.isFinite(overallRaw)) throw new Error("judge reply was incomplete: no overall rating");
+  const overall = Math.min(100, Math.max(0, Math.round(overallRaw)));
   const { score, hint, bucket } = scoreFrom(clues, perClue, overall);
   return { score, hint, verdict: bucket, perClue, overall };
 }
