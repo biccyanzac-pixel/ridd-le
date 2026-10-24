@@ -62,13 +62,16 @@ const mock = {
       .replace(/^(a|an|the)\s+/, "")
       .split(/\s+/)[0];
     // good: 95 on every clue; near: 20 on the first, 90 on the rest; else 10
-    // on every clue but 90 on specificity.
+    // on every clue but 90 on specificity. With the overall rating below and
+    // three clues: good 95, near 65, else 32.5.
     const clues = ids.map((id, i) => ({
       id,
       score: first === "good" ? 95 : first === "near" ? (i === 0 ? 20 : 90) : id === "specific" ? 90 : 10,
       reason: "mock",
     }));
-    return JSON.stringify({ clues });
+    // Overall rating: good 95, near 60, else 20 (see the test's expected scores).
+    const overall = first === "good" ? 95 : first === "near" ? 60 : 20;
+    return JSON.stringify({ clues, overall });
   },
 };
 
@@ -140,7 +143,10 @@ async function openaiChat(url, key, model, req, extra) {
       body: JSON.stringify({
         model,
         temperature: 0,
-        max_tokens: 400,
+        // Thinking models spend tokens on reasoning before the JSON; a tight
+        // limit returns a truncated (but valid) object, which the parser
+        // refuses. 1,500 leaves ample room.
+        max_tokens: 1500,
         messages: [
           { role: "system", content: req.system },
           { role: "user", content: req.user },

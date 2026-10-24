@@ -85,12 +85,12 @@ const before = await quotaCalls();
   const good = (await play(p, "good umbrella")).body;
   const near = (await play(p, "near umbrella")).body;
   const wrong = (await play(p, "bad umbrella")).body;
-  // mock ratings: good 95 everywhere; near 20/90/90; bad 10/10/90 (three clues).
+  // mock ratings (three clues + overall): good 95; near 20/90/90 + 60 = 65; bad 10/10/90 + 20 = 32.5.
   check("a strong answer scores high with no hint", good.result.score === 95 && good.result.hint === null, String(good.result.score));
-  check("a near-miss scores in the middle with the weakest clue's hint", Math.abs(near.result.score - 66.67) < 0.01 && typeof near.result.hint === "string" && near.result.hint.length > 5, `${near.result.score} / ${near.result.hint}`);
-  check("a poor answer scores low with a hint", Math.abs(wrong.result.score - 36.67) < 0.01 && typeof wrong.result.hint === "string", String(wrong.result.score));
+  check("a near-miss scores in the middle with the weakest clue's hint", near.result.score === 65 && typeof near.result.hint === "string" && near.result.hint.length > 5, `${near.result.score} / ${near.result.hint}`);
+  check("a poor answer scores low with a hint", wrong.result.score === 32.5 && typeof wrong.result.hint === "string", String(wrong.result.score));
   const me = wrong.leaderboard.top.find((r) => r.you) ?? wrong.leaderboard.you;
-  check("the daily score is the average of the three", Math.abs(me.score - (95 + 66.67 + 36.67) / 3) < 0.01, String(me?.score));
+  check("the daily score is the average of the three", Math.abs(me.score - (95 + 65 + 32.5) / 3) < 0.01, String(me?.score));
   check("attempts carry a numeric score", wrong.attempts.every((a) => Number.isFinite(a.score)));
 }
 
@@ -120,9 +120,9 @@ const before = await quotaCalls();
   const run = (await call("/api/judge/run", { method: "POST", headers: ADMIN })).body;
   check("the cron drains the queue once the provider answers", run.drained >= 1, JSON.stringify(run));
   const after = (await call(`/api/attempts?challengeId=${encodeURIComponent(challenge.id)}&playerId=${p.playerId}`)).body;
-  check("the player's result updates on their next visit", after.attempts[0].pending === false && Math.abs(after.attempts[0].score - 36.67) < 0.01, JSON.stringify(after.attempts[0]));
+  check("the player's result updates on their next visit", after.attempts[0].pending === false && after.attempts[0].score === 32.5, JSON.stringify(after.attempts[0]));
   const again = (await play(await session(), flakyAnswer.toUpperCase())).body;
-  check("the queued score is cached for everyone afterwards", again.result.cached === true && Math.abs(again.result.score - 36.67) < 0.01);
+  check("the queued score is cached for everyone afterwards", again.result.cached === true && again.result.score === 32.5);
 }
 
 // === flags and overrides ====================================================
