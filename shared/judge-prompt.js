@@ -14,19 +14,22 @@
  */
 import { cluesFor, scoreFrom } from "./clues.js";
 
-export const JUDGE_PROMPT_VERSION = 2;
+export const JUDGE_PROMPT_VERSION = 3;
 
 export function systemPrompt() {
   return [
     "You judge answers to lateral-thinking riddles. A riddle has no single right answer:",
     "any answer that genuinely satisfies the riddle's clues deserves a high rating, however",
     "unexpected. Judge the candidate answer on its own merits, charitably but honestly, the way",
-    "a thoughtful quizmaster would. Rate each clue from 0 (not at all) to 100 (fully, obviously)",
-    "for how well the candidate satisfies it; use the whole range, with middling numbers for",
-    "a stretch or a partial fit. Rate low an answer that merely restates the riddle, names a",
-    "vague category, or talks to you instead of answering. Never penalise an answer for",
-    "differing from the example. Give a reason of at most 15 words per clue.",
-    "Reply with JSON only, no prose, no markdown fences.",
+    "a thoughtful quizmaster would. Rate each clue from 0 (not at all) to 100 (perfectly) for how",
+    "well the candidate satisfies it, then give an overall rating for how satisfying X is as an",
+    "answer to the whole riddle: fit, precision and wit together. Use precise integers (73, 88,",
+    "41), never round multiples of 5 or 10, and spread them: a clean but ordinary fit is around",
+    "75 to 88, only a perfect and surprising fit reaches 95 or more, a stretch sits in the 40s",
+    "to 60s. Two different answers should almost never get identical ratings. Rate low an",
+    "answer that merely restates the riddle, names a vague category, or talks to you instead",
+    "of answering. Never penalise an answer for differing from the example. Give a reason of",
+    "at most 15 words per clue. Reply with JSON only, no prose, no markdown fences.",
   ].join(" ");
 }
 
@@ -41,8 +44,10 @@ export function userPrompt({ prompt, slug, example, answer }) {
     "Clues. For each, how well does X satisfy it, 0 to 100?",
     ...lines,
     "",
+    "Then overall: how satisfying is X as an answer to this riddle, 0 to 100?",
+    "",
     "Reply with exactly this JSON shape:",
-    `{"clues":[${clues.map((c) => `{"id":"${c.id}","score":0,"reason":"..."}`).join(",")}]}`,
+    `{"clues":[${clues.map((c) => `{"id":"${c.id}","score":0,"reason":"..."}`).join(",")}],"overall":0}`,
   ].join("\n");
 }
 
@@ -64,8 +69,9 @@ export function responseSchema(slug) {
           required: ["id", "score", "reason"],
         },
       },
+      overall: { type: "integer" },
     },
-    required: ["clues"],
+    required: ["clues", "overall"],
   };
 }
 
@@ -103,6 +109,8 @@ export function parseJudgeReply(slug, text) {
     score = Math.min(100, Math.max(0, Math.round(score)));
     return { id: c.id, score, reason: String(item?.reason ?? "").slice(0, 160) };
   });
-  const { score, hint, bucket } = scoreFrom(clues, perClue);
-  return { score, hint, verdict: bucket, perClue };
+  const overallRaw = Number(parsed?.overall);
+  const overall = Number.isFinite(overallRaw) ? Math.min(100, Math.max(0, Math.round(overallRaw))) : null;
+  const { score, hint, bucket } = scoreFrom(clues, perClue, overall);
+  return { score, hint, verdict: bucket, perClue, overall };
 }

@@ -382,12 +382,15 @@ export function verdictFrom(clues, results) {
  * the weakest clue rephrased, when that clue rates under 60. `bucket` is a
  * coarse label kept for the log and the cache table's column.
  */
-export function scoreFrom(clues, ratings) {
+export function scoreFrom(clues, ratings, overall = null) {
   if (!Array.isArray(ratings) || ratings.length !== clues.length) {
     throw new TypeError("scoreFrom: one rating per clue is required");
   }
-  let sum = 0;
-  let weight = 0;
+  // The model's overall rating of the answer (fit, precision, wit) counts as
+  // one more full-weight rating, so two answers that tick the same boxes can
+  // still be told apart by how well they do it.
+  let sum = Number.isFinite(overall) ? Math.min(100, Math.max(0, overall)) : 0;
+  let weight = Number.isFinite(overall) ? 1 : 0;
   let weakest = null;
   clues.forEach((c, i) => {
     const r = Math.min(100, Math.max(0, Number(ratings[i]?.score) || 0));
