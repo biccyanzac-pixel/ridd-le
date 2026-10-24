@@ -26,7 +26,10 @@ export const PENDING = "pending";
 // junk cost nothing and are not counted.
 const IP_HOURLY_LIMIT = 20;
 const MODEL_TIMEOUT_MS = 25_000;
-const PREWARM_BUDGET_PER_RUN = 25;
+// Per cron run (every 10 minutes), paced so a run stays under Groq's 8,000
+// tokens a minute: 15 calls of ~400 tokens over ~45 seconds.
+const PREWARM_BUDGET_PER_RUN = 15;
+const PREWARM_GAP_MS = 3000;
 const QUEUE_BUDGET_PER_RUN = 40;
 
 // --- providers -----------------------------------------------------------------
@@ -472,7 +475,10 @@ export async function prewarm(env, dayKey, budget = PREWARM_BUDGET_PER_RUN) {
     if (await cachedVerdict(env, key)) continue;
     const v = await judgeAnswer(env, { challenge, answer, ip: null, day: today, source: "prewarm" });
     if (v.verdict === PENDING) break;
-    if (v.source === "judge") warmed += 1;
+    if (v.source === "judge") {
+      warmed += 1;
+      await new Promise((r) => setTimeout(r, PREWARM_GAP_MS));
+    }
   }
   return warmed;
 }
