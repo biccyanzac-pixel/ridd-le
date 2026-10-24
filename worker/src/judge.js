@@ -34,16 +34,17 @@ const QUEUE_BUDGET_PER_RUN = 40;
 // Test double, selected with `--var JUDGE_PRIMARY:mock` under wrangler dev.
 // Verdict follows the candidate's first word: "good ..." passes every clue,
 // "near ..." fails the first clue only, anything else fails them all. An
-// answer containing "flaky" fails on its first call and succeeds afterwards,
-// to exercise the paused/queued path. Never configured in production.
-const flakySeen = new Set();
+// answer containing "flaky" fails on its first two calls (primary, then the
+// backup's one try) and succeeds afterwards, to exercise the paused/queued
+// path. Never configured in production.
+const flakySeen = new Map();
 const mock = {
   async call(env, model, req) {
     if (env.JUDGE_MOCK_FAIL === "1") throw new Error("mock provider down");
     const answer = req.user.match(/Candidate answer X: "([^"]*)"/)?.[1] ?? "";
-    if (/flaky/i.test(answer) && !flakySeen.has(answer)) {
-      flakySeen.add(answer);
-      throw new Error("mock flaky failure");
+    if (/flaky/i.test(answer) && (flakySeen.get(answer) ?? 0) < 2) {
+      flakySeen.set(answer, (flakySeen.get(answer) ?? 0) + 1);
+      throw new Error(`mock flaky failure ${flakySeen.get(answer)} for ${answer}`);
     }
     const ids = [...req.user.matchAll(/^\d+\. \[([^\]]+)\]/gm)].map((m) => m[1]);
     const first = answer
@@ -360,13 +361,28 @@ export async function judgeAnswer(env, { challenge, answer, ip, day = dayKeyNow(
     return { verdict: PENDING, hint: null, source: "paused", cacheKey, reason: "quota" };
   }
 
+  // One provider failing (a burst limit, a timeout) is not a reason to pause:
+  // the other slot gets one try, if it has quota, before the answer is queued.
   let result;
+  let used = slot;
   try {
     result = await askModel(env, slot, challenge, answer, day);
   } catch (err) {
     console.error("judge failed", slot.name, String(err?.message ?? err));
-    await log(env, { ...base, verdict: PENDING, source: "paused", hint: "error", model: `${slot.name}/${slot.model}` });
-    return { verdict: PENDING, hint: null, source: "paused", cacheKey, reason: "provider_error" };
+    const other = providerSlots(env).find((s) => s.which !== slot.which);
+    const otherUsed = other ? await usage(env, other.name, day) : Infinity;
+    if (other && otherUsed < other.dailyLimit) {
+      try {
+        result = await askModel(env, other, challenge, answer, day);
+        used = other;
+      } catch (err2) {
+        console.error("judge failed", other.name, String(err2?.message ?? err2));
+      }
+    }
+    if (!result) {
+      await log(env, { ...base, verdict: PENDING, source: "paused", hint: "error", model: `${used.name}/${used.model}` });
+      return { verdict: PENDING, hint: null, source: "paused", cacheKey, reason: "provider_error" };
+    }
   }
 
   // Write first, respond second. If someone else wrote this key in the
@@ -409,7 +425,14 @@ export async function drainQueue(env, budget = QUEUE_BUDGET_PER_RUN) {
       continue;
     }
     const verdict = await judgeAnswer(env, { challenge, answer: item.answer, ip: null, source: "queue" });
-    if (verdict.verdict === PENDING) break; // still no quota; try next cron
+    if (verdict.verdict === PENDING) {
+      if (verdict.reason === "quota") break; // still no quota; try next cron
+      // A provider error on this one answer must not block the queue behind
+      // it: count the try, move on, and give up on it after ten crons.
+      if (item.tries + 1 >= 10) await env.DB.prepare(`DELETE FROM judge_queue WHERE id = ?`).bind(item.id).run();
+      else await env.DB.prepare(`UPDATE judge_queue SET tries = tries + 1 WHERE id = ?`).bind(item.id).run();
+      continue;
+    }
     await applyToSubmission(env, item.submission_id, verdict);
     await env.DB.prepare(`DELETE FROM judge_queue WHERE id = ?`).bind(item.id).run();
     done += 1;
