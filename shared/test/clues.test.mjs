@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 import { CHALLENGES } from "../challenges.js";
-import { CLUES, SPECIFICITY_CLUE, cluesFor, verdictFrom } from "../clues.js";
+import { CLUES, SPECIFICITY_CLUE, cluesFor, scoreFrom, verdictFrom } from "../clues.js";
 
 let failures = 0;
 function check(label, ok, detail = "") {
@@ -73,6 +73,17 @@ check("failing only specificity is close with the specificity hint", vague.verdi
 check("the hint names the first failed required clue", verdictFrom(clues, r(false, false, true, true)).hint === "hint a");
 check("a soft-only fail still carries a hint", verdictFrom(clues, r(true, true, false, true)).hint === "hint s");
 check("result count must match clue count", (() => { try { verdictFrom(clues, r(true)); return false; } catch { return true; } })());
+
+// --- 0 to 100 scoring --------------------------------------------------------
+const rate = (...scores) => scores.map((score) => ({ score }));
+check("all 100 scores 100", scoreFrom(clues, rate(100, 100, 100, 100)).score === 100);
+check("all 0 scores 0 with the first clue's hint", scoreFrom(clues, rate(0, 0, 0, 0)).score === 0 && scoreFrom(clues, rate(0, 0, 0, 0)).hint === "hint a");
+check("soft clues count half", Math.abs(scoreFrom(clues, rate(100, 100, 0, 100)).score - 85.71) < 0.01);
+check("the hint is the weakest clue when it rates under 60", scoreFrom(clues, rate(90, 50, 80, 95)).hint === "hint b");
+check("no hint when every clue rates 60 or more", scoreFrom(clues, rate(90, 60, 80, 95)).hint === null);
+check("ratings are clamped to 0..100", scoreFrom(clues, rate(150, -20, 100, 100)).score <= 100);
+check("buckets: 70+ correct, 35+ close, else wrong", scoreFrom(clues, rate(70, 70, 70, 70)).bucket === "correct" && scoreFrom(clues, rate(40, 40, 40, 40)).bucket === "close" && scoreFrom(clues, rate(10, 10, 10, 10)).bucket === "wrong");
+check("rating count must match clue count", (() => { try { scoreFrom(clues, rate(1)); return false; } catch { return true; } })());
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CLUE CHECKS PASSED");
 process.exit(failures ? 1 : 0);

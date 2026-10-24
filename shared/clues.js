@@ -373,3 +373,31 @@ export function verdictFrom(clues, results) {
   const first = requiredFailed[0] ?? softFailed[0] ?? null;
   return { verdict, hint: first ? first.hint : null, failed: failed.map((c) => c.id) };
 }
+
+/**
+ * The 0 to 100 score from per-clue ratings, pure. `ratings` is aligned with
+ * cluesFor(slug): { score: 0..100, reason? }. The answer's score is the
+ * weighted mean of its clue ratings (soft clues count half), so there is no
+ * right or wrong, only how fully the answer meets the riddle. The hint is
+ * the weakest clue rephrased, when that clue rates under 60. `bucket` is a
+ * coarse label kept for the log and the cache table's column.
+ */
+export function scoreFrom(clues, ratings) {
+  if (!Array.isArray(ratings) || ratings.length !== clues.length) {
+    throw new TypeError("scoreFrom: one rating per clue is required");
+  }
+  let sum = 0;
+  let weight = 0;
+  let weakest = null;
+  clues.forEach((c, i) => {
+    const r = Math.min(100, Math.max(0, Number(ratings[i]?.score) || 0));
+    const w = c.required ? 1 : 0.5;
+    sum += r * w;
+    weight += w;
+    if (!weakest || r < weakest.rating) weakest = { clue: c, rating: r };
+  });
+  const score = weight ? Math.round((sum / weight) * 100) / 100 : 0;
+  const hint = weakest && weakest.rating < 60 ? weakest.clue.hint : null;
+  const bucket = score >= 70 ? "correct" : score >= 35 ? "close" : "wrong";
+  return { score, hint, bucket, weakest: weakest?.clue.id ?? null };
+}

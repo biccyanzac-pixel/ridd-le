@@ -57,18 +57,18 @@ async function submitAnswer(page, text) {
   await submitAnswer(page, "good lantern");
   await page.waitForSelector("#attempt-list .attempt-row");
   const first = await page.textContent("#attempt-list .attempt-row:nth-child(1) .attempt-score");
-  check("a correct answer shows 'Correct'", first?.trim() === "Correct", first);
+  check("a strong answer shows its score", first?.trim() === "95.00", first);
   // The score counts up from the previous average; wait for it to settle.
-  await page.waitForFunction(() => document.querySelector("#daily-score")?.textContent.includes("100"), null, { timeout: 5000 }).catch(() => {});
-  check("the daily score shows 100", (await page.textContent("#daily-score"))?.includes("100"), await page.textContent("#daily-score"));
+  await page.waitForFunction(() => document.querySelector("#daily-score")?.textContent.includes("95"), null, { timeout: 5000 }).catch(() => {});
+  check("the daily score shows 95", (await page.textContent("#daily-score"))?.includes("95"), await page.textContent("#daily-score"));
   await page.screenshot({ path: path.join(OUT, "03-correct-360-dark.png") });
 
   await submitAnswer(page, "near lantern");
   const second = await page.textContent("#attempt-list .attempt-row:nth-child(2) .attempt-score");
   const hint = await page.textContent("#attempt-list .attempt-row:nth-child(2) .attempt-hint");
-  check("a close answer shows 'Close' with a hint", second?.trim() === "Close" && hint?.startsWith("but"), `${second} / ${hint}`);
+  check("a near-miss shows a middling score with a hint", second?.trim() === "66.67" && hint?.startsWith("but"), `${second} / ${hint}`);
   const flag = page.locator("#attempt-list .attempt-row:nth-child(2) .attempt-flag");
-  check("a 'Wrong verdict?' button is offered", (await flag.count()) === 1);
+  check("an 'Unfair score?' button is offered", (await flag.count()) === 1);
   await flag.click();
   await page.waitForTimeout(600);
   check("flagging thanks the player", (await flag.textContent())?.includes("Flagged"), await flag.textContent());
@@ -78,8 +78,8 @@ async function submitAnswer(page, text) {
   const third = await page.textContent("#attempt-list .attempt-row:nth-child(3) .attempt-score");
   check("a paused answer shows 'Judging paused', not an error", third?.trim() === "Judging paused" && await page.isHidden("#error"), third);
   check("the caption says one attempt is still to be scored", (await page.textContent("#daily-score-caption"))?.includes("paused"));
-  await page.waitForFunction(() => document.querySelector("#daily-score")?.textContent.includes("75"), null, { timeout: 5000 }).catch(() => {});
-  check("a pending attempt is left out of the average (75, not 50)", (await page.textContent("#daily-score"))?.includes("75"), await page.textContent("#daily-score"));
+  await page.waitForFunction(() => document.querySelector("#daily-score")?.textContent.includes("80.8"), null, { timeout: 5000 }).catch(() => {});
+  check("a pending attempt is left out of the average (80.83, not 53.89)", (await page.textContent("#daily-score"))?.includes("80.8"), await page.textContent("#daily-score"));
   check("the game is finished: form gone, done note shown", await page.isHidden("#play") && await page.isVisible("#attempts-done"));
   check("the bonus round is not offered", await page.isHidden("#bonus") && await page.isHidden("#play-bonus-button"));
   await page.screenshot({ path: path.join(OUT, "05-paused-finished-360-dark.png"), fullPage: true });

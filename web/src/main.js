@@ -258,19 +258,14 @@ let attempts = [];
 // paused. Everything below branches on this once, never on the date.
 const SERVER_JUDGED = serverJudged(challenge.scoringVersion);
 
-const VERDICT_LABEL = { correct: "Correct", close: "Close", wrong: "Not it", pending: "Judging paused" };
-
-/** The badge text for an attempt: its verdict from v6 on, its score before. */
+/** The score text for an attempt: the number, or "Judging paused" while it waits. */
 function verdictText(attempt) {
-  if (attempt?.verdict) return VERDICT_LABEL[attempt.verdict] ?? attempt.verdict;
+  if (attempt?.verdict === "pending" || attempt?.pending) return "Judging paused";
   return formatScore(attempt.score);
 }
 
 function verdictClass(attempt) {
-  if (attempt?.verdict === "correct") return "good";
-  if (attempt?.verdict === "wrong") return "bad";
-  if (attempt?.verdict === "pending") return "pending";
-  if (attempt?.verdict === "close") return "";
+  if (attempt?.verdict === "pending" || attempt?.pending) return "pending";
   return scoreClass(attempt.score);
 }
 
@@ -427,7 +422,7 @@ function attemptRow(attempt) {
     note.className = "attempt-hint";
     note.textContent = "Saved. The judge is taking a break; your result will appear on your next visit.";
     li.append(note);
-  } else if (attempt.hint && attempt.verdict !== "correct") {
+  } else if (attempt.hint && attempt.score < 70) {
     const hint = document.createElement("p");
     hint.className = "attempt-hint";
     hint.textContent = attempt.hint;
@@ -438,7 +433,7 @@ function attemptRow(attempt) {
     const flag = document.createElement("button");
     flag.type = "button";
     flag.className = "attempt-flag";
-    flag.textContent = "Wrong verdict?";
+    flag.textContent = "Unfair score?";
     flag.addEventListener("click", async () => {
       flag.disabled = true;
       try {
@@ -621,7 +616,7 @@ function todayRowNode(entry, rank) {
       answer.title = attempt.answer ?? "";
       const score = document.createElement("span");
       score.className = "row-attempt-score";
-      score.textContent = attempt.verdict ? verdictText(attempt) : boardScore(attempt.score);
+      score.textContent = attempt.pending ? verdictText(attempt) : boardScore(attempt.score);
       item.append(label, answer, score);
       list.append(item);
     }

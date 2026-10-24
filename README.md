@@ -9,35 +9,34 @@ leaderboard discovers the strongest readings after the fact.
 ## How it's judged (from 24 October 2026, scoring v6)
 
 Every riddle has a short **clue checklist** (`shared/clues.js`): each half of
-its contradiction as a yes/no question about the answer, plus one implicit
-clue that rejects vague categories and restatements. Any answer that satisfies
-every clue is correct; the example shown in the box is one example, never the
-key. The worker asks a hosted model one yes/no per clue and derives the verdict
-itself: **correct** (every required clue passes), **close** (exactly one
-fails; the hint is that clue rephrased, "but can it open a lock?"), otherwise
-**wrong**. Correct scores 100, close 50, wrong 0, and the day is still the
+its contradiction as a question about the answer, plus one implicit clue that
+marks down vague categories and restatements. There is no right answer and no
+wrong answer. The worker asks a hosted model to rate, 0 to 100, how fully the
+answer satisfies each clue, and the answer's score is the weighted mean of
+those ratings (`scoreFrom`), to two decimals. The example shown in the box is
+one strong answer, never the key. A score under 70 comes with a hint: the
+weakest clue rephrased ("but can it open a lock?"). The day is still the
 average of three attempts.
 
-- **Judged once, forever.** The verdict for a (riddle, normalised answer) pair
+- **Judged once, forever.** The score for a (riddle, normalised answer) pair
   is cached in D1 before the player sees it, so "The hedges" and "hedge" get
-  one verdict and the model is never asked twice. `worker/test/judge.e2e.mjs`
+  one score and the model is never asked twice. `worker/test/judge.e2e.mjs`
   proves 100 requests with 20 distinct answers reach the model 20 times.
-- **Free.** Workers AI on the Workers Free plan is the primary judge, Groq's
-  free tier the backup (`docs/judge-eval.md` has the measurements and limits).
-  Quota counters per provider per day switch to the backup at 80% and pause
-  judging at 100% of both; a per-address hourly limit stops one player draining
-  it. The cron pre-judges the likely answers for the next riddle each evening.
+- **Free.** Groq's free tier (Qwen 3.8 27B) is the primary judge and Workers
+  AI (gpt-oss-20b) the backup (`docs/judge-eval.md` has the measurements and
+  limits). Quota counters per provider per day switch to the backup at 80% and
+  pause judging at 100% of both; a per-address hourly limit stops one player
+  draining it. The cron pre-judges the likely answers for the next riddle.
 - **Never an error.** While judging is paused an answer is accepted as pending,
   queued, and scored by the cron when quota returns; the player sees "judging
-  paused" and their result on their next visit. No other model ever judges
-  live, so a verdict never depends on when you played.
+  paused" and their score on their next visit. No other model ever judges
+  live, so a score never depends on when you played.
 - **Junk is free.** Empty, over six words, or the riddle's own words with
   nothing added are refused with a fixed hint and don't cost an attempt.
-- **Flags and overrides.** "Wrong verdict?" under an attempt flags its cached
-  verdict for the owner's daily log; an owner override replaces it for everyone
+- **Flags and overrides.** "Unfair score?" under an attempt flags its cached
+  score for the owner's daily log; an owner override replaces it for everyone
   who gave that answer. `tools/judge-eval/pull-log.mjs` pulls the daily file
-  and the weekly summary (calls, cache hit rate, paused minutes, common "close"
-  answers).
+  and the weekly summary.
 
 Only the riddle, its clues, the example and the answer go to a model. No
 player identifiers are sent or logged.
@@ -181,7 +180,7 @@ Order matters. The worker's insert references columns that migrations add,
 so a worker deployed ahead of its migration breaks every submission:
 
 1. `cd worker && npx wrangler d1 execute jacob-gg-leaderboard --remote --file=migrations/<n>.sql`
-   (0001 and 0002 so far; `CREATE TABLE IF NOT EXISTS` parts are safe to re-run,
+   (0001, 0002 and 0003 so far; `CREATE TABLE IF NOT EXISTS` parts are safe to re-run,
    the `ALTER TABLE` lines are not, so run each migration once)
 2. Secrets the judge needs, once: `npx wrangler secret put GROQ_API_KEY` and
    `npx wrangler secret put JUDGE_ADMIN_TOKEN` (any long random string; it is
