@@ -84,6 +84,8 @@ check("no hint when every clue rates 60 or more", scoreFrom(clues, rate(90, 60, 
 check("ratings are clamped to 0..100", scoreFrom(clues, rate(150, -20, 100, 100)).score <= 100);
 check("buckets: 70+ correct, 35+ close, else wrong", scoreFrom(clues, rate(70, 70, 70, 70)).bucket === "correct" && scoreFrom(clues, rate(40, 40, 40, 40)).bucket === "close" && scoreFrom(clues, rate(10, 10, 10, 10)).bucket === "wrong");
 check("rating count must match clue count", (() => { try { scoreFrom(clues, rate(1)); return false; } catch { return true; } })());
+check("an overall rating counts as one more full-weight rating", Math.abs(scoreFrom(clues, rate(100, 100, 100, 100), 65).score - 92.22) < 0.01);
+check("no overall rating changes nothing", scoreFrom(clues, rate(80, 80, 80, 80), null).score === 80);
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CLUE CHECKS PASSED");
 process.exit(failures ? 1 : 0);

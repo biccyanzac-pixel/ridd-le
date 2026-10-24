@@ -43,15 +43,15 @@ const QUEUE_BUDGET_PER_RUN = 40;
 // Test double, selected with `--var JUDGE_PRIMARY:mock` under wrangler dev.
 // Verdict follows the candidate's first word: "good ..." passes every clue,
 // "near ..." fails the first clue only, anything else fails them all. An
-// answer containing "flaky" fails on its first two calls (primary, then the
-// backup's one try) and succeeds afterwards, to exercise the paused/queued
+// answer containing "flaky" fails on its first three calls (primary, its
+// retry, then the backup's one try) and succeeds afterwards, to exercise the paused/queued
 // path. Never configured in production.
 const flakySeen = new Map();
 const mock = {
   async call(env, model, req) {
     if (env.JUDGE_MOCK_FAIL === "1") throw new Error("mock provider down");
     const answer = req.user.match(/Candidate answer X: "([^"]*)"/)?.[1] ?? "";
-    if (/flaky/i.test(answer) && (flakySeen.get(answer) ?? 0) < 2) {
+    if (/flaky/i.test(answer) && (flakySeen.get(answer) ?? 0) < 3) {
       flakySeen.set(answer, (flakySeen.get(answer) ?? 0) + 1);
       throw new Error(`mock flaky failure ${flakySeen.get(answer)} for ${answer}`);
     }
@@ -247,9 +247,10 @@ async function ipAllowed(env, ip) {
 // --- cache -----------------------------------------------------------------------
 
 function served(row) {
-  // A row judged before scores existed (prompt v1) is treated as a miss and
-  // re-judged; its old verdict is never served.
-  if (!row || row.score == null) return null;
+  // A row judged under an older prompt is treated as a miss and re-judged;
+  // its old score is never served. (Bump JUDGE_PROMPT_VERSION rarely: every
+  // cached answer is re-judged on its next request.)
+  if (!row || row.score == null || row.prompt_version !== JUDGE_PROMPT_VERSION) return null;
   const overridden = row.override_score != null;
   const score = overridden ? row.override_score : row.score;
   const hint = overridden ? row.override_hint : row.hint;
@@ -278,8 +279,10 @@ export async function cachedVerdict(env, cacheKey) {
 }
 
 async function writeVerdict(env, { cacheKey, slug, normalized, result, model }) {
-  // A stale row from before scores existed makes way for the new one.
-  await env.DB.prepare(`DELETE FROM judge_verdicts WHERE cache_key = ? AND score IS NULL`).bind(cacheKey).run();
+  // A stale row (older prompt, or no score) makes way for the new one.
+  await env.DB.prepare(`DELETE FROM judge_verdicts WHERE cache_key = ? AND (score IS NULL OR prompt_version <> ?)`)
+    .bind(cacheKey, JUDGE_PROMPT_VERSION)
+    .run();
   // INSERT OR IGNORE then re-read: if two requests for a brand-new answer
   // race, the first verdict written is the one everybody gets.
   await env.DB.prepare(
@@ -387,7 +390,15 @@ export async function judgeAnswer(env, { challenge, answer, ip, day = dayKeyNow(
     result = await askModel(env, slot, challenge, answer, day);
   } catch (err) {
     console.error("judge failed", slot.name, String(err?.message ?? err));
-    const other = providerSlots(env).find((s) => s.which !== slot.which);
+    // One quick retry of the same provider first: a riddle's answers should
+    // come from one model as far as possible, and most failures are bursts.
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      result = await askModel(env, slot, challenge, answer, day);
+    } catch (err2) {
+      console.error("judge failed again", slot.name, String(err2?.message ?? err2));
+    }
+    const other = result ? null : providerSlots(env).find((s) => s.which !== slot.which);
     const otherUsed = other ? await usage(env, other.name, day) : Infinity;
     if (other && otherUsed < other.dailyLimit) {
       try {
